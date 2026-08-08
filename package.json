@@ -13,6 +13,7 @@
     "typecheck": "tsc -b --noEmit",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "screenshot": "node scripts/screenshot.mjs",
+    "bundle:artifact": "npm run build && node scripts/bundle-artifact.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

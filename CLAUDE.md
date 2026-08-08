@@ -12,6 +12,7 @@ Claude Code on the Web でのフロントエンド開発 DX を体験するた�
 | `npm run typecheck` | `tsc -b --noEmit`（strict 有効） |
 | `npm run lint` | oxlint |
 | `npm run screenshot` | 起動中の dev サーバーを実ブラウザで撮影 → `screenshots/` |
+| `npm run bundle:artifact` | ビルド成果物を 1 枚の HTML に束ねる → `dist/standalone.html` |
 | `npm run build` | 型チェック込みの本番ビルド |
 
 ## 構成の約束
@@ -38,6 +39,15 @@ npm run screenshot       # light / dark / mobile の 3 枚
 
 コンテナには Chromium が同梱されている。`npx playwright install` は不要で、
 `scripts/screenshot.mjs` が `PLAYWRIGHT_BROWSERS_PATH` 配下から実行ファイルを探して使う。
+
+## 単一 HTML への同梱
+
+`npm run bundle:artifact` は JS / CSS を全てインラインした `dist/standalone.html` を出す。
+Artifact として公開する場合など、外部ホストへのリクエストが CSP で止まる環境向け。
+
+出力は `<!doctype>` / `<html>` / `<head>` を含まない**断片**で、配信側が骨組みを被せる前提。
+`<head>` が無いぶん charset の指定先が無くなるので、先頭に `<meta charset="utf-8">` を必ず置く。
+これを落とすと日本語が windows-1252 として解釈され、画面全体が文字化けする。
 
 ## セッション起動フック
 
