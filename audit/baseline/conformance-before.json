@@ -1,0 +1,325 @@
+{
+  "ranAt": "2026-08-08T16:34:57.544Z",
+  "total": 768,
+  "divergences": 288,
+  "patterns": [
+    {
+      "count": 96,
+      "sampleInput": {
+        "amount": 0,
+        "category": "travel",
+        "applicantGrade": "director",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager"
+      ],
+      "expectedApprovers": [],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 60,
+      "sampleInput": {
+        "amount": 3000,
+        "category": "travel",
+        "applicantGrade": "director",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 32,
+      "sampleInput": {
+        "amount": 0,
+        "category": "entertainment",
+        "applicantGrade": "director",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance"
+      ],
+      "expectedApprovers": [
+        "compliance"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 20,
+      "sampleInput": {
+        "amount": 3000,
+        "category": "entertainment",
+        "applicantGrade": "director",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance",
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "compliance",
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 18,
+      "sampleInput": {
+        "amount": 1000000,
+        "category": "travel",
+        "applicantGrade": "director",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "executive"
+      ],
+      "expectedApprovers": [
+        "executive"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 18,
+      "sampleInput": {
+        "amount": 1000000,
+        "category": "travel",
+        "applicantGrade": "director",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "accounting",
+        "executive"
+      ],
+      "expectedApprovers": [
+        "accounting",
+        "executive"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "travel",
+        "applicantGrade": "staff",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager"
+      ],
+      "expectedApprovers": [
+        "manager",
+        "director"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "travel",
+        "applicantGrade": "staff",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "manager",
+        "director",
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "travel",
+        "applicantGrade": "manager",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [],
+      "expectedApprovers": [
+        "director"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "travel",
+        "applicantGrade": "manager",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "director",
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 1000000,
+        "category": "entertainment",
+        "applicantGrade": "director",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance",
+        "executive"
+      ],
+      "expectedApprovers": [
+        "compliance",
+        "executive"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 6,
+      "sampleInput": {
+        "amount": 1000000,
+        "category": "entertainment",
+        "applicantGrade": "director",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance",
+        "accounting",
+        "executive"
+      ],
+      "expectedApprovers": [
+        "compliance",
+        "accounting",
+        "executive"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 2,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "entertainment",
+        "applicantGrade": "staff",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance"
+      ],
+      "expectedApprovers": [
+        "manager",
+        "director",
+        "compliance"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 2,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "entertainment",
+        "applicantGrade": "staff",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "manager",
+        "compliance",
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "manager",
+        "director",
+        "compliance",
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 2,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "entertainment",
+        "applicantGrade": "manager",
+        "hasReceipt": true,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "compliance"
+      ],
+      "expectedApprovers": [
+        "director",
+        "compliance"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    },
+    {
+      "count": 2,
+      "sampleInput": {
+        "amount": 100000,
+        "category": "entertainment",
+        "applicantGrade": "manager",
+        "hasReceipt": false,
+        "isForeign": true
+      },
+      "actualApprovers": [
+        "compliance",
+        "accounting"
+      ],
+      "expectedApprovers": [
+        "director",
+        "compliance",
+        "accounting"
+      ],
+      "actualTax": 0,
+      "expectedTax": 0
+    }
+  ]
+}

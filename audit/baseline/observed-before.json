@@ -1,0 +1,112 @@
+{
+  "capturedAt": "2026-08-08T16:34:06.524Z",
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (File not found)"
+  ],
+  "report": [
+    {
+      "id": "01-boundary-100000",
+      "title": "R1 境界: ちょうど 100,000 円",
+      "note": "仕様は「100,000 円以上で部長承認」。部長承認が出るのが正。",
+      "state": {
+        "amount": 100000,
+        "category": "supplies",
+        "grade": "staff",
+        "receipt": true,
+        "foreign": false
+      },
+      "observed": {
+        "steps": [
+          "課長承認"
+        ],
+        "amount": "¥100,000",
+        "tax": "¥9,000"
+      },
+      "file": "/home/user/claude-playground/audit/shots/01-boundary-100000.png"
+    },
+    {
+      "id": "02-boundary-100001",
+      "title": "R1 境界: 100,001 円",
+      "note": "比較対象。境界の 1 円差で挙動が変わるかを目視で対比する。",
+      "state": {
+        "amount": 100001,
+        "category": "supplies",
+        "grade": "staff",
+        "receipt": true,
+        "foreign": false
+      },
+      "observed": {
+        "steps": [
+          "課長承認",
+          "部長承認"
+        ],
+        "amount": "¥100,000",
+        "tax": "¥9,000"
+      },
+      "file": "/home/user/claude-playground/audit/shots/02-boundary-100001.png"
+    },
+    {
+      "id": "03-entertainment-no-receipt",
+      "title": "R3+R4: 交際費 11,000 円・領収書なし",
+      "note": "コンプライアンス承認と経理確認が併記されるか。控除税額 1,000 円。",
+      "state": {
+        "amount": 11000,
+        "category": "entertainment",
+        "grade": "staff",
+        "receipt": false,
+        "foreign": false
+      },
+      "observed": {
+        "steps": [
+          "課長承認",
+          "コンプライアンス承認",
+          "経理確認"
+        ],
+        "amount": "¥11,000",
+        "tax": "¥1,000"
+      },
+      "file": "/home/user/claude-playground/audit/shots/03-entertainment-no-receipt.png"
+    },
+    {
+      "id": "04-director-self-approval",
+      "title": "R5: 部長本人が 1,500,000 円を申請",
+      "note": "仕様は「同格以下を除外」。課長承認・部長承認とも消え、役員承認のみが正。",
+      "state": {
+        "amount": 1500000,
+        "category": "travel",
+        "grade": "director",
+        "receipt": true,
+        "foreign": false
+      },
+      "observed": {
+        "steps": [
+          "課長承認",
+          "役員承認"
+        ],
+        "amount": "¥1,500,000",
+        "tax": "¥136,000"
+      },
+      "file": "/home/user/claude-playground/audit/shots/04-director-self-approval.png"
+    },
+    {
+      "id": "05-foreign",
+      "title": "国外取引 11,000 円",
+      "note": "控除税額は 0 円が正。",
+      "state": {
+        "amount": 11000,
+        "category": "travel",
+        "grade": "staff",
+        "receipt": true,
+        "foreign": true
+      },
+      "observed": {
+        "steps": [
+          "課長承認"
+        ],
+        "amount": "¥11,000",
+        "tax": "¥0"
+      },
+      "file": "/home/user/claude-playground/audit/shots/05-foreign.png"
+    }
+  ]
+}

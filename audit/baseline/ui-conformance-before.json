@@ -1,0 +1,60 @@
+{
+  "ranAt": "2026-08-08T16:36:01.467Z",
+  "total": 324,
+  "failed": 252,
+  "pageErrors": [],
+  "byField": [
+    {
+      "field": "承認ステップ",
+      "count": 132,
+      "sample": {
+        "input": {
+          "amount": 0,
+          "category": "travel",
+          "applicantGrade": "director",
+          "hasReceipt": true,
+          "isForeign": true
+        },
+        "field": "承認ステップ",
+        "observed": [
+          "課長承認"
+        ],
+        "expected": [
+          "承認不要"
+        ]
+      }
+    },
+    {
+      "field": "申請金額表示",
+      "count": 144,
+      "sample": {
+        "input": {
+          "amount": 2999,
+          "category": "travel",
+          "applicantGrade": "staff",
+          "hasReceipt": true,
+          "isForeign": true
+        },
+        "field": "申請金額表示",
+        "observed": "¥3,000",
+        "expected": "¥2,999"
+      }
+    },
+    {
+      "field": "控除税額表示",
+      "count": 126,
+      "sample": {
+        "input": {
+          "amount": 2999,
+          "category": "travel",
+          "applicantGrade": "staff",
+          "hasReceipt": true,
+          "isForeign": false
+        },
+        "field": "控除税額表示",
+        "observed": "¥0",
+        "expected": "¥272"
+      }
+    }
+  ]
+}

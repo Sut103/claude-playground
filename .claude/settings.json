@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && { [ -d node_modules ] || npm ci --no-audit --no-fund >/dev/null 2>&1 || npm install --no-audit --no-fund >/dev/null 2>&1; }; pgrep -f 'http.server 8123' >/dev/null || (nohup python3 -m http.server 8123 >/tmp/audit-http.log 2>&1 &); echo '[session-start] audit environment ready: npm run audit'"
+          }
+        ]
+      }
+    ]
+  }
+}

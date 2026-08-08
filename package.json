@@ -1,0 +1,19 @@
+{
+  "name": "claude-playground",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code on the Web における人間監査の実証用サンプル",
+  "scripts": {
+    "test": "node --test \"src/**/*.test.mjs\"",
+    "test:coverage": "node --test --experimental-test-coverage \"src/**/*.test.mjs\"",
+    "serve": "python3 -m http.server 8123",
+    "audit:spec": "node audit/conformance.mjs",
+    "audit:ui": "node audit/ui-conformance.mjs",
+    "audit:shots": "node audit/screenshot.mjs",
+    "audit": "npm run test:coverage && npm run audit:spec && npm run audit:ui && npm run audit:shots"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
