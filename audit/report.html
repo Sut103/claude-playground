@@ -1,0 +1,984 @@
+<title>Claude Code on the Web における人間監査の実証</title>
+
+<style>
+  /* ── トークン: 明（既定） ───────────────────────────────── */
+  :root {
+    --ground:   #E9EDF2;
+    --surface:  #FFFFFF;
+    --surface-2:#F3F6F9;
+    --ink:      #151E29;
+    --ink-mute: #57657A;
+    --ink-faint:#7C8899;
+    --rule:     #D2DAE4;
+    --rule-soft:#E3E9F0;
+
+    --accent:   #2A4C93;   /* 藍: 対話要素・強調 */
+    --accent-bg:#E4EAF6;
+    --on-accent:#FFFFFF;
+    --pass:     #1F6F45;
+    --pass-bg:  #E1F0E7;
+    --fail:     #A32B1E;
+    --fail-bg:  #F7E4E1;
+    --warn:     #855F0F;
+    --warn-bg:  #F6ECD5;
+
+    --mincho: "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP", "Songti SC", serif;
+    --gothic: "Hiragino Kaku Gothic ProN", "Yu Gothic", YuGothic, "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --maxw: 74rem;
+    --prose: 40rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0F141A;
+      --surface:  #161D26;
+      --surface-2:#1C242F;
+      --ink:      #E3E9F1;
+      --ink-mute: #97A4B4;
+      --ink-faint:#78859A;
+      --rule:     #2B3542;
+      --rule-soft:#222B36;
+
+      --accent:   #86A6E6;
+      --accent-bg:#1D2839;
+      --on-accent:#0F141A;
+      --pass:     #63C089;
+      --pass-bg:  #16281F;
+      --fail:     #E88B80;
+      --fail-bg:  #2C1A18;
+      --warn:     #D9AE55;
+      --warn-bg:  #2A2213;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:   #0F141A;
+    --surface:  #161D26;
+    --surface-2:#1C242F;
+    --ink:      #E3E9F1;
+    --ink-mute: #97A4B4;
+    --ink-faint:#78859A;
+    --rule:     #2B3542;
+    --rule-soft:#222B36;
+
+    --accent:   #86A6E6;
+    --accent-bg:#1D2839;
+    --on-accent:#0F141A;
+    --pass:     #63C089;
+    --pass-bg:  #16281F;
+    --fail:     #E88B80;
+    --fail-bg:  #2C1A18;
+    --warn:     #D9AE55;
+    --warn-bg:  #2A2213;
+  }
+
+  /* ── 基本 ────────────────────────────────────────────── */
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--gothic);
+    font-size: 16px;
+    line-height: 1.85;
+    margin: 0;
+    padding: 0 20px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; }
+  .prose { max-width: var(--prose); }
+
+  p { margin: 0 0 1.1em; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface-2);
+         border: 1px solid var(--rule-soft); border-radius: 3px; padding: .1em .35em; }
+
+  /* ── 表紙 ────────────────────────────────────────────── */
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 72px 0 22px;
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 18px;
+  }
+  h1 {
+    font-family: var(--mincho); font-weight: 600;
+    font-size: clamp(30px, 4.6vw, 50px); line-height: 1.28;
+    letter-spacing: .01em; margin: 0 0 18px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--ink-mute); max-width: 46rem; margin: 0 0 30px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 0 34px; font-family: var(--mono);
+          font-size: 12px; color: var(--ink-faint); line-height: 2.2; }
+  .meta b { color: var(--ink-mute); font-weight: 400; }
+
+  /* ── 見出し ──────────────────────────────────────────── */
+  section { margin: 0 0 64px; scroll-margin-top: 20px; }
+  h2 {
+    font-family: var(--mincho); font-weight: 600; font-size: 25px; line-height: 1.4;
+    margin: 0 0 8px; padding-bottom: 12px; border-bottom: 1px solid var(--rule);
+    display: flex; align-items: baseline; gap: 14px; text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+    color: var(--accent); flex: none; padding-top: 2px;
+  }
+  h2 + .lede { color: var(--ink-mute); font-size: 15px; margin: 14px 0 26px; max-width: 46rem; }
+  h3 { font-family: var(--gothic); font-size: 15.5px; font-weight: 700; margin: 34px 0 12px;
+       letter-spacing: .01em; }
+
+  /* ── 要約カード ──────────────────────────────────────── */
+  .findings { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+  .finding {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-top: 3px solid var(--accent); padding: 20px 20px 18px;
+  }
+  .finding.is-alarm { border-top-color: var(--fail); }
+  .finding.is-good  { border-top-color: var(--pass); }
+  .finding .k { font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+                text-transform: uppercase; color: var(--ink-faint); }
+  .finding .v { font-family: var(--mincho); font-size: 30px; font-weight: 600;
+                line-height: 1.2; margin: 8px 0 8px; font-variant-numeric: tabular-nums; }
+  .finding.is-alarm .v { color: var(--fail); }
+  .finding.is-good .v  { color: var(--pass); }
+  .finding p { font-size: 13.5px; line-height: 1.7; color: var(--ink-mute); margin: 0; }
+
+  /* ── 表 ──────────────────────────────────────────────── */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 620px; }
+  caption { caption-side: bottom; text-align: left; font-size: 12.5px; color: var(--ink-faint);
+            padding: 12px 2px 0; }
+  th, td { padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--rule-soft);
+           vertical-align: top; }
+  thead th { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+             color: var(--ink-faint); font-weight: 400; background: var(--surface-2);
+             border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mark { font-family: var(--mono); font-weight: 700; }
+  .mark.y { color: var(--pass); }
+  .mark.n { color: var(--fail); }
+  .mark.na { color: var(--ink-faint); }
+
+  /* ── チップ ──────────────────────────────────────────── */
+  .chip {
+    display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    padding: 2px 9px; border-radius: 2px; border: 1px solid transparent; white-space: nowrap;
+  }
+  .chip.pass { background: var(--pass-bg); color: var(--pass); border-color: var(--pass); }
+  .chip.fail { background: var(--fail-bg); color: var(--fail); border-color: var(--fail); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+  .chip.info { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+
+  /* ── コンソール ──────────────────────────────────────── */
+  .console { background: var(--surface); border: 1px solid var(--rule); }
+  .console-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 12px 18px; border-bottom: 1px solid var(--rule); background: var(--surface-2);
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--ink-faint);
+  }
+  .console-body { padding: 22px 18px; }
+  .grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 22px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+
+  fieldset { border: 1px solid var(--rule-soft); margin: 0; padding: 16px; background: var(--surface-2); }
+  legend { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+           color: var(--ink-faint); padding: 0 6px; }
+  .field { display: grid; grid-template-columns: 8.5rem minmax(0,1fr); gap: 10px 12px;
+           align-items: center; margin-bottom: 10px; }
+  .field:last-child { margin-bottom: 0; }
+  .field > label { font-size: 13px; color: var(--ink-mute); }
+  input[type="number"], select {
+    font: inherit; font-size: 14px; font-family: var(--mono); width: 100%;
+    padding: 6px 9px; background: var(--surface); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 3px; box-sizing: border-box;
+  }
+  .switches { display: flex; flex-direction: column; gap: 9px; }
+  .switch { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; line-height: 1.5; }
+  .switch input { margin: 4px 0 0; accent-color: var(--fail); flex: none; }
+  .switch .d { color: var(--ink-faint); font-size: 12.5px; display: block; }
+
+  .readout { border: 1px solid var(--rule-soft); background: var(--surface-2); padding: 14px 16px; }
+  .readout h4 { margin: 0 0 10px; font-size: 12px; font-family: var(--mono); letter-spacing: .1em;
+                text-transform: uppercase; color: var(--ink-faint); font-weight: 400;
+                display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; min-height: 26px; margin-bottom: 12px; }
+  .rowline { display: flex; justify-content: space-between; gap: 14px; font-size: 14px;
+             padding: 5px 0; border-top: 1px dotted var(--rule); }
+  .rowline span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .rowline.diff span:last-child { color: var(--fail); font-weight: 700; }
+
+  button.run {
+    font: inherit; font-family: var(--mono); font-size: 12.5px; letter-spacing: .06em;
+    padding: 8px 18px; cursor: pointer; border-radius: 3px;
+    background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent);
+  }
+  button.run:hover { filter: brightness(1.08); }
+  button.run.ghost { background: transparent; color: var(--accent); }
+
+  pre.log {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; margin: 0;
+    background: var(--surface-2); border: 1px solid var(--rule-soft);
+    padding: 14px 16px; overflow-x: auto; white-space: pre; color: var(--ink);
+    max-height: 340px; overflow-y: auto;
+  }
+  pre.log .ok { color: var(--pass); }
+  pre.log .ng { color: var(--fail); }
+  pre.log .dim { color: var(--ink-faint); }
+
+  figure { margin: 0; }
+  figure img { width: 100%; display: block; border: 1px solid var(--rule); }
+  figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 10px; }
+
+  ul.tight, ol.tight { margin: 0 0 1.1em; padding-left: 1.3em; }
+  ul.tight li, ol.tight li { margin-bottom: .5em; }
+
+  .callout {
+    border-left: 3px solid var(--warn); background: var(--warn-bg);
+    padding: 16px 20px; margin: 0 0 22px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { color: var(--ink); }
+
+  .toc { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--mono); font-size: 12.5px;
+         padding: 16px 0 0; border-top: 1px solid var(--rule-soft); }
+  .toc a { text-decoration: none; color: var(--ink-mute); }
+  .toc a:hover { color: var(--accent); text-decoration: underline; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 20px; font-size: 12.5px;
+           color: var(--ink-faint); font-family: var(--mono); line-height: 2; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">検証レポート ／ Claude Code on the Web</div>
+  <h1>人間はどこまで監査役でいられるか</h1>
+  <p class="standfirst">
+    ローカル開発では、人間はコードを読み、動かし、触って品質を確かめる。
+    実行環境が手元から離れたとき、その三つのうち何が失われ、何を機械に置き換えられるのか。
+    実際に欠陥を仕込んだコードを書き、四つの監査チャネルを走らせて検出力を実測した。
+  </p>
+  <div class="meta">
+    <span><b>対象</b> Sut103/claude-playground</span>
+    <span><b>ブランチ</b> claude/web-code-quality-assurance-scxfbl</span>
+    <span><b>実施日</b> 2026-08-08</span>
+    <span><b>実行環境</b> Node v22.22.2 ／ 4 vCPU ／ 16 GB</span>
+  </div>
+  <nav class="toc">
+    <a href="#s1">1 環境の実測</a>
+    <a href="#s2">2 実験の設計</a>
+    <a href="#s3">3 検出力の実測</a>
+    <a href="#s4">4 監査コンソール</a>
+    <a href="#s5">5 目視証跡</a>
+    <a href="#s6">6 残るギャップ</a>
+    <a href="#s7">7 運用モデル</a>
+  </nav>
+</header>
+
+<!-- ══ 要約 ══ -->
+<section id="summary">
+  <div class="findings">
+    <div class="finding is-alarm">
+      <div class="k">単体テストの検出数</div>
+      <div class="v">0 / 3</div>
+      <p>13 件全パス・分岐カバレッジ 100% の状態で、仕込んだ欠陥 3 件すべてを見逃した。カバレッジは品質の指標ではない。</p>
+    </div>
+    <div class="finding is-good">
+      <div class="k">仕様オラクル照合の検出数</div>
+      <div class="v">2 / 3</div>
+      <p>768 ケースの全数照合で 288 件の不整合を自動検出。ロジック層の欠陥 2 件を人間の操作なしに特定した。</p>
+    </div>
+    <div class="finding is-good">
+      <div class="k">UI 実描画照合の検出数</div>
+      <div class="v">3 / 3</div>
+      <p>実ブラウザに描画された文字列を仕様と突合。表示層だけの欠陥を含め全件検出。324 ケースを 24 秒。</p>
+    </div>
+    <div class="finding">
+      <div class="k">人間が読むべき分量</div>
+      <div class="v">約 40 行</div>
+      <p>実装全文ではなく、仕様書と独立オラクル、そして差分表だけ。監査の負荷は実装規模に比例しない。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 1 ══ -->
+<section id="s1">
+  <h2><span class="num">01</span>この環境で実際に何ができたか</h2>
+  <p class="lede">能力の議論の前に、実測値を置く。以下はすべてこのセッション内で実行して確認した事実である。</p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>実行環境の実測。ネットワークは既定で制限され、パッケージレジストリのみが到達可能だった。</caption>
+      <thead>
+        <tr><th>項目</th><th>実測結果</th><th>監査上の意味</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>コード実行</td>
+          <td><span class="chip pass">可</span> Node v22.22.2 ／ Python 3.11.15</td>
+          <td>テスト・静的解析・任意のスクリプトを完全に実行できる</td>
+        </tr>
+        <tr>
+          <td>実ブラウザ操作</td>
+          <td><span class="chip pass">可</span> Chromium 事前配置＋Playwright</td>
+          <td>画面の描画・操作・スクリーンショット取得が可能</td>
+        </tr>
+        <tr>
+          <td>ローカルサーバ</td>
+          <td><span class="chip pass">可</span> 127.0.0.1:8123 で疎通</td>
+          <td>アプリを起動して実際に叩ける</td>
+        </tr>
+        <tr>
+          <td>計算資源</td>
+          <td class="num">4 vCPU ／ 16 GB RAM ／ 空き約 30 GB</td>
+          <td>実用的な規模のビルド・テストに耐える</td>
+        </tr>
+        <tr>
+          <td>外部ネットワーク</td>
+          <td><span class="chip warn">制限</span> npm・PyPI は 200、一般サイトは遮断</td>
+          <td>外部 API 連携の実地確認はできない場合がある</td>
+        </tr>
+        <tr>
+          <td>セッションの永続性</td>
+          <td><span class="chip fail">なし</span> コンテナは破棄される</td>
+          <td>push しない成果物と証跡は消える</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>ここから言えること</h3>
+  <p class="prose">
+    「見られない・動かせない」のは <strong>人間</strong> であって、環境ではない。
+    環境そのものはローカルとほぼ同等の実行能力を持つ。
+    したがって問題は能力ではなく <strong>観測</strong> ——
+    実行した結果を、人間がどう受け取り、どう判断するかの設計問題に還元される。
+  </p>
+</section>
+
+<!-- ══ 2 ══ -->
+<section id="s2">
+  <h2><span class="num">02</span>実験の設計</h2>
+  <p class="lede">
+    監査手法の良し悪しを主観で語らないために、既知の欠陥を仕込んだ題材を用意し、各チャネルが何件見つけるかを測った。
+  </p>
+
+  <p class="prose">
+    題材は経費承認のルーティング。金額・費目・申請者の役職から必要な承認ステップを決め、
+    仕入控除税額を計算する。仕様は <code>SPEC.md</code> に条文として固定した。
+    そのうえで、実務で実際に起きる三種類の欠陥を仕込んだ。
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>仕込んだ欠陥。いずれも「テストを書いた本人が気づけない」性質のものを選んだ。</caption>
+      <thead>
+        <tr><th>ID</th><th>欠陥</th><th>性質</th><th>実務での帰結</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">D1</td>
+          <td>R1 の閾値を <code>&gt;</code> で実装（仕様は「100,000 円<em>以上</em>」）</td>
+          <td>境界値の等号取り違え</td>
+          <td>ちょうど 10 万円の申請が部長承認を経ずに通る</td>
+        </tr>
+        <tr>
+          <td class="num">D2</td>
+          <td>自己承認禁止を「同格のみ除外」と解釈（仕様は「同格<em>以下</em>」）</td>
+          <td>仕様解釈の誤り</td>
+          <td>部長申請に対し課長承認が残り、統制が形骸化する</td>
+        </tr>
+        <tr>
+          <td class="num">D3</td>
+          <td>画面表示のみ千円単位に丸め（ロジックは正しい）</td>
+          <td>表示層限定の欠陥</td>
+          <td>2,999 円の控除税額 272 円が「¥0」と表示される</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p><strong>重要な前提。</strong>
+      単体テストは「実装者の理解」に沿って書かれている。D2 のように理解そのものが誤っている場合、
+      テストは誤りを固定するだけで、検出装置としては機能しない。
+      この構造は人間が書いても AI が書いても同じであり、AI 特有の問題ではない。
+      ただし AI は同じ理解で実装とテストを一気に書くため、<strong>誤解が両方に均一に伝播しやすい</strong>。
+    </p>
+  </div>
+</section>
+
+<!-- ══ 3 ══ -->
+<section id="s3">
+  <h2><span class="num">03</span>四つの監査チャネルと、その検出力</h2>
+  <p class="lede">
+    人間の「読む・動かす・触る」を機械側に配分し直した四つのチャネル。実測結果は明確に分かれた。
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>各チャネルの実測検出力。① は 13 件全パス・分岐カバレッジ 100% の状態でこの結果である。</caption>
+      <thead>
+        <tr>
+          <th>チャネル</th><th>置き換える人間の行為</th>
+          <th class="num">規模</th>
+          <th class="num">D1</th><th class="num">D2</th><th class="num">D3</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>① 単体テスト＋カバレッジ</b><br><span style="color:var(--ink-faint);font-size:13px">実装者の意図の自己申告</span></td>
+          <td>—</td>
+          <td class="num">13 件</td>
+          <td class="num"><span class="mark n">✗</span></td>
+          <td class="num"><span class="mark n">✗</span></td>
+          <td class="num"><span class="mark n">✗</span></td>
+        </tr>
+        <tr>
+          <td><b>② スクリーンショット行列</b><br><span style="color:var(--ink-faint);font-size:13px">状態を列挙して静止画に固定</span></td>
+          <td>読む・見る</td>
+          <td class="num">5 状態</td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark y">✓</span></td>
+        </tr>
+        <tr>
+          <td><b>③ 仕様オラクル全数照合</b><br><span style="color:var(--ink-faint);font-size:13px">仕様から独立に書いた実装と差分比較</span></td>
+          <td>触る（探索）</td>
+          <td class="num">768 ケース</td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark na">—</span></td>
+        </tr>
+        <tr>
+          <td><b>④ UI 実描画 × 仕様照合</b><br><span style="color:var(--ink-faint);font-size:13px">ブラウザが描いた文字列を仕様と突合</span></td>
+          <td>触る（操作）</td>
+          <td class="num">324 ケース</td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark y">✓</span></td>
+          <td class="num"><span class="mark y">✓</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>③ が効く理由 — そして、効かなくなる条件</h3>
+  <p class="prose">
+    <code>audit/oracle.mjs</code> は <code>SPEC.md</code> の条文だけを根拠に約 40 行で書き、
+    実装を一切参照していない。両者は同じ仕様から独立に導かれた二つの答えであり、
+    食い違えばどちらかが間違っている。機械が 768 通りを突き合わせ、人間には差分表だけが届く。
+  </p>
+  <p class="prose">
+    この独立性が崩れた瞬間、③ は無価値になる。だから運用上の不変条件を置いた —
+    <strong>オラクルは実装を見て書かない。差分が出たとき、直す候補は実装か仕様の記述であって、オラクルではない。</strong>
+    仕様変更は <code>SPEC.md</code> → オラクル → 実装 の順にしか流さない。
+  </p>
+
+  <h3>是正後の状態</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>チャネル</th><th class="num">是正前</th><th class="num">是正後</th></tr></thead>
+      <tbody>
+        <tr><td>単体テスト</td><td class="num">13 pass / 0 fail</td><td class="num">17 pass / 0 fail（回帰テスト 4 件追加）</td></tr>
+        <tr><td>仕様オラクル照合</td><td class="num"><span class="chip fail">288 / 768 不一致</span>（16 パターン）</td><td class="num"><span class="chip pass">0 / 768 不一致</span></td></tr>
+        <tr><td>UI 実描画照合</td><td class="num"><span class="chip fail">252 / 324 不一致</span></td><td class="num"><span class="chip pass">0 / 324 不一致</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══ 4 ══ -->
+<section id="s4">
+  <h2><span class="num">04</span>監査コンソール</h2>
+  <p class="lede">
+    ここから先は読み物ではない。実際に動いている実装そのものがこのページに載っている。
+    欠陥を注入し直し、監査が本当に捕まえるかを、あなたの手で確かめられる。
+  </p>
+
+  <div class="console">
+    <div class="console-bar">
+      <span>Live — src/rules.mjs ＋ audit/oracle.mjs</span>
+      <span id="verdict-chip" class="chip pass">仕様に適合</span>
+    </div>
+    <div class="console-body">
+      <div class="grid2">
+        <fieldset>
+          <legend>申請内容</legend>
+          <div class="field">
+            <label for="p-amount">申請金額（円）</label>
+            <input id="p-amount" type="number" value="100000" min="0" step="1" />
+          </div>
+          <div class="field">
+            <label for="p-category">費目</label>
+            <select id="p-category">
+              <option value="travel">旅費交通費</option>
+              <option value="entertainment">交際費</option>
+              <option value="supplies" selected>消耗品費</option>
+              <option value="other">その他</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-grade">申請者の役職</label>
+            <select id="p-grade">
+              <option value="staff" selected>担当</option>
+              <option value="manager">課長</option>
+              <option value="director">部長</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-receipt">領収書</label>
+            <select id="p-receipt"><option value="1" selected>あり</option><option value="0">なし</option></select>
+          </div>
+          <div class="field">
+            <label for="p-foreign">取引区分</label>
+            <select id="p-foreign"><option value="0" selected>国内</option><option value="1">国外</option></select>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>欠陥の再注入</legend>
+          <div class="switches">
+            <label class="switch">
+              <input type="checkbox" id="d1" />
+              <span><b>D1</b> R1 の閾値を <code>&gt;</code> にする
+                <span class="d">境界値の等号取り違え。10 万円ちょうどを試してください。</span></span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="d2" />
+              <span><b>D2</b> 自己承認禁止を「同格のみ除外」にする
+                <span class="d">仕様解釈の誤り。申請者を部長にしてください。</span></span>
+            </label>
+            <label class="switch">
+              <input type="checkbox" id="d3" />
+              <span><b>D3</b> 表示を千円単位に丸める
+                <span class="d">表示層のみの欠陥。2,999 円などを試してください。</span></span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="grid2" style="margin-top:22px">
+        <div class="readout">
+          <h4>実装の出力 <span id="impl-badge" class="chip info">src/rules.mjs</span></h4>
+          <div class="steps" id="impl-steps"></div>
+          <div class="rowline" id="row-amount"><span>申請金額（表示）</span><span id="impl-amount"></span></div>
+          <div class="rowline" id="row-tax"><span>仕入控除税額（表示）</span><span id="impl-tax"></span></div>
+        </div>
+        <div class="readout">
+          <h4>仕様オラクルの期待値 <span class="chip info">SPEC.md</span></h4>
+          <div class="steps" id="orc-steps"></div>
+          <div class="rowline"><span>申請金額（表示）</span><span id="orc-amount"></span></div>
+          <div class="rowline"><span>仕入控除税額（表示）</span><span id="orc-tax"></span></div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px; display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+        <button class="run" id="run-conformance">全数照合を実行（768 ケース）</button>
+        <button class="run ghost" id="run-tests">単体テストを実行（17 件）</button>
+        <span id="run-status" style="font-family:var(--mono);font-size:12px;color:var(--ink-faint)"></span>
+      </div>
+      <pre class="log" id="log" style="margin-top:14px"><span class="dim">— ボタンを押すと、このページの中で監査が実行されます。ローカル環境は不要です。</span></pre>
+    </div>
+  </div>
+
+  <p class="prose" style="margin-top:22px">
+    これが「触れない」問題への最も直接的な答えになる。
+    レビュアーは自分の端末に何もインストールせず、リポジトリを clone せず、
+    <strong>実装そのものを対話的に叩いて確かめられる</strong>。
+    純粋なドメインロジックとフロントエンドについては、ローカルの探索的テストとほぼ同等の体験が成立する。
+  </p>
+</section>
+
+<!-- ══ 5 ══ -->
+<section id="s5">
+  <h2><span class="num">05</span>目視のための証跡</h2>
+  <p class="lede">
+    機械の照合が通っても、最終的に「これでよい」と言うのは人間である。そのために、状態を列挙した画面の証跡を残す。
+  </p>
+
+  <figure>
+    <img src="before-after.png" alt="修正前後の画面比較。R1 境界と R5 自己承認禁止の 2 ケースについて、左が修正前、右が修正後。" />
+    <figcaption>
+      <code>audit/compare.mjs</code> が生成した是正証跡。是正前の画面（左）は監査の基準線として
+      <code>audit/baseline/</code> に保全され、リポジトリに commit されている。
+      「いつ・何を・どう直したか」がコードと画像の両方で追跡可能になる。
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ══ 6 ══ -->
+<section id="s6">
+  <h2><span class="num">06</span>それでも残るギャップ</h2>
+  <p class="lede">
+    ここまでの手法で埋まらないものを正直に列挙する。エンタープライズで責任を持つなら、埋まらない部分こそが判断の対象になる。
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>◎ ほぼ同等 ／ ○ 代替可能 ／ △ 部分的 ／ × 代替困難</caption>
+      <thead>
+        <tr><th>ローカル開発での行為</th><th class="num">Web 環境</th><th>代替手段と、その限界</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>コードを読む</td><td class="num"><span class="chip pass">◎</span></td>
+            <td>差分レビューは元から非対話。むしろ仕様・オラクル・差分表に絞られ負荷は下がる</td></tr>
+        <tr><td>テスト・ビルドを走らせる</td><td class="num"><span class="chip pass">◎</span></td>
+            <td>環境の実行能力はローカルと同等。CI を必須化すれば人間の手元実行は不要</td></tr>
+        <tr><td>画面を見る</td><td class="num"><span class="chip pass">○</span></td>
+            <td>スクリーンショット行列＋公開ページ。<b>ただし列挙した状態しか写らない</b></td></tr>
+        <tr><td>画面を触って探索する</td><td class="num"><span class="chip warn">△</span></td>
+            <td>本ページのような実装同梱の公開ページで大部分は再現できる。
+                バックエンド・認証・外部連携を含む系では成立しない</td></tr>
+        <tr><td>未知の欠陥に「気づく」</td><td class="num"><span class="chip warn">△</span></td>
+            <td>全数照合は<b>仕様に書いたことしか検証しない</b>。仕様の外側にある問題は原理的に検出対象外</td></tr>
+        <tr><td>実機・実データでの確認</td><td class="num"><span class="chip fail">×</span></td>
+            <td>egress 制限とデータ非持ち込みにより不可。ステージング環境での受入試験が別途必要</td></tr>
+        <tr><td>性能・負荷の実測</td><td class="num"><span class="chip fail">×</span></td>
+            <td>共有コンテナ上の測定値は本番の予測に使えない</td></tr>
+        <tr><td>リアルタイムの割り込み</td><td class="num"><span class="chip warn">△</span></td>
+            <td>介入は非同期になる。plan mode での事前承認と PR レビューに介入点を移す必要がある</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>最も本質的な移動</h3>
+  <p class="prose">
+    この検証で最も重要な発見は、技術的な可否ではない。
+    <strong>品質保証のコストが、実装の後段から前段へ移動する</strong> ことである。
+  </p>
+  <p class="prose">
+    ③④ が成立したのは <code>SPEC.md</code> という判定基準が存在したからだ。
+    仕様が曖昧なまま「いい感じに作って」と依頼すれば、オラクルは書けず、
+    照合は成立せず、監査は「実装を全部読む」に逆戻りする。
+    ローカル開発では、人間が動かしながら仕様を事後的に発見できた。その逃げ道が塞がる。
+    <strong>Web 環境で AI に開発させることは、仕様を先に書くことを事実上強制する。</strong>
+    これは制約であると同時に、エンタープライズにとっては統制上の利点でもある。
+  </p>
+</section>
+
+<!-- ══ 7 ══ -->
+<section id="s7">
+  <h2><span class="num">07</span>エンタープライズ運用モデル</h2>
+  <p class="lede">
+    以上を踏まえた、人間が品質責任を保持したまま自律開発を受け入れるための構成。
+  </p>
+
+  <h3>人間の介入点を三つに絞る</h3>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th class="num">段階</th><th>人間の行為</th><th>成果物</th><th>これを怠ると</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num">着手前</td>
+          <td><b>仕様の承認</b>。条文として書かれた判定基準を読み、承認する</td>
+          <td><code>SPEC.md</code>／plan mode での計画承認</td>
+          <td>以降のすべての自動監査が根拠を失う</td>
+        </tr>
+        <tr>
+          <td class="num">実装中</td>
+          <td><b>差分表のレビュー</b>。実装全文ではなく、仕様と食い違った箇所だけを判断する</td>
+          <td>照合レポート／CI の失敗内容</td>
+          <td>不整合が「テスト緑」に埋もれる</td>
+        </tr>
+        <tr>
+          <td class="num">受入時</td>
+          <td><b>証跡の承認</b>。画面の証跡と是正前後の比較を見て、最終判断する</td>
+          <td>スクリーンショット行列／PR レビュー</td>
+          <td>仕様に書き落とした要件が本番に出る</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>技術的な下支え</h3>
+  <ul class="tight prose">
+    <li><b>監査を CI の必須ゲートにする。</b> <code>npm run audit</code> が落ちたらマージ不可。
+        人間の善意ではなく機構で担保する。</li>
+    <li><b>SessionStart フックで環境を再現する。</b> セッションは破棄されるため、
+        <code>.claude/settings.json</code> に依存関係の復元と検証サーバ起動を書き、
+        どのセッションでも同じ監査が走る状態を保証する。</li>
+    <li><b>証跡をリポジトリに commit する。</b> 是正前の測定結果を <code>audit/baseline/</code> に保全すれば、
+        「何を検出し、どう直したか」が git の履歴として監査可能になる。</li>
+    <li><b>オラクルの独立性をレビュー規約にする。</b> これが崩れると監査は形骸化する。
+        オラクルの変更は仕様変更としてのみ許可する。</li>
+    <li><b>PR を非同期の介入点にする。</b> 行単位のコメントと CI 連動により、
+        リアルタイム性の欠如を手続きで補償する。</li>
+  </ul>
+
+  <h3>結論</h3>
+  <p class="prose">
+    <strong>ローカルと同一の開発体験は得られない。</strong>
+    人間がリアルタイムに割り込み、勘で触って気づく経路は失われる。
+  </p>
+  <p class="prose">
+    しかし <strong>同等以上の品質保証は成立する</strong>。本検証では、
+    人間の手作業に依存した従来型の確認（単体テスト 13 件・カバレッジ 100%）が 3 件中 0 件しか捕まえなかったのに対し、
+    仕様を正典に据えた機械的全数照合は 3 件中 3 件を捕まえた。
+    <strong>再現性・網羅性・証跡性という監査の三要件については、Web 環境のほうが構造的に強い。</strong>
+  </p>
+  <p class="prose">
+    条件は一つ。<strong>人間が仕様を書き、承認すること。</strong>
+    その一点を人間が担い続ける限り、実装の自律化は品質責任の放棄にはならない。
+  </p>
+</section>
+
+<footer>
+  <div>検証コード一式: <code>Sut103/claude-playground</code> ／ branch <code>claude/web-code-quality-assurance-scxfbl</code></div>
+  <div>再現手順: <code>npm install &amp;&amp; npm run serve &amp;</code> のうえ <code>npm run audit</code></div>
+  <div>本ページ内の監査は、リポジトリの <code>src/rules.mjs</code> と <code>audit/oracle.mjs</code> と同一のロジックで動作します。</div>
+</footer>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ══════════════════════════════════════════════════════════
+     実装側 — src/rules.mjs と同一。defects で欠陥を再注入する。
+     ══════════════════════════════════════════════════════════ */
+  const GRADE_ORDER = ['staff', 'manager', 'director', 'executive'];
+  const APPROVAL_ORDER = ['manager', 'director', 'compliance', 'accounting', 'executive'];
+  const GRADE_APPROVERS = new Set(['manager', 'director', 'executive']);
+  const rank = (g) => GRADE_ORDER.indexOf(g);
+
+  function resolveApprovers(req, defects) {
+    const required = new Set();
+    required.add('manager');
+
+    // D1: 仕様は「100,000 円以上」。欠陥版は等号を落とす。
+    if (defects.d1 ? req.amount > 100000 : req.amount >= 100000) required.add('director');
+    if (req.amount >= 1000000) required.add('executive');
+    if (req.category === 'entertainment') required.add('compliance');
+    if (!req.hasReceipt && req.amount >= 3000) required.add('accounting');
+
+    for (const role of [...required]) {
+      if (defects.d2) {
+        // D2: 同格のみを除外し、職能承認者も巻き添えにする誤実装
+        if (role === req.applicantGrade) required.delete(role);
+      } else {
+        if (GRADE_APPROVERS.has(role) && rank(role) <= rank(req.applicantGrade)) required.delete(role);
+      }
+    }
+    return APPROVAL_ORDER.filter((r) => required.has(r));
+  }
+
+  const deductibleTax = (req) => (req.isForeign ? 0 : Math.floor((req.amount * 10) / 110));
+  const evaluate = (req, defects) => ({
+    approvers: resolveApprovers(req, defects),
+    deductibleTax: deductibleTax(req),
+  });
+
+  // D3: 表示層のみの欠陥
+  function formatYen(value, defects) {
+    const v = defects.d3 ? Math.round(value / 1000) * 1000 : value;
+    return '¥' + v.toLocaleString('ja-JP');
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     オラクル側 — SPEC.md の条文のみを根拠とし、上の実装を参照しない。
+     ══════════════════════════════════════════════════════════ */
+  const RANK = { staff: 0, manager: 1, director: 2, executive: 3 };
+  const ORDER = ['manager', 'director', 'compliance', 'accounting', 'executive'];
+  const GRADE_ROLES = new Set(['manager', 'director', 'executive']);
+
+  function oracleApprovers(r) {
+    const need = new Set(['manager']);
+    if (r.amount >= 100000) need.add('director');
+    if (r.amount >= 1000000) need.add('executive');
+    if (r.category === 'entertainment') need.add('compliance');
+    if (!r.hasReceipt && r.amount >= 3000) need.add('accounting');
+    for (const role of [...need]) {
+      if (GRADE_ROLES.has(role) && RANK[role] <= RANK[r.applicantGrade]) need.delete(role);
+    }
+    return ORDER.filter((x) => need.has(x));
+  }
+  const oracleTax = (r) => (r.isForeign ? 0 : Math.floor((r.amount * 10) / 110));
+  const oracleEvaluate = (r) => ({ approvers: oracleApprovers(r), deductibleTax: oracleTax(r) });
+  const oracleYen = (v) => '¥' + v.toLocaleString('ja-JP');
+
+  /* ══════════════════════════════════════════════════════════
+     プレイグラウンド
+     ══════════════════════════════════════════════════════════ */
+  const LABELS = {
+    manager: '課長承認', director: '部長承認', compliance: 'コンプライアンス承認',
+    accounting: '経理確認', executive: '役員承認',
+  };
+  const $ = (id) => document.getElementById(id);
+
+  const readDefects = () => ({ d1: $('d1').checked, d2: $('d2').checked, d3: $('d3').checked });
+  const readRequest = () => ({
+    amount: Math.max(0, Number($('p-amount').value || 0)),
+    category: $('p-category').value,
+    applicantGrade: $('p-grade').value,
+    hasReceipt: $('p-receipt').value === '1',
+    isForeign: $('p-foreign').value === '1',
+  });
+
+  function paintSteps(node, roles, refRoles) {
+    node.textContent = '';
+    const list = roles.length ? roles : ['__none__'];
+    list.forEach((role) => {
+      const el = document.createElement('span');
+      const isNone = role === '__none__';
+      const differs = refRoles && (isNone ? refRoles.length !== 0 : !refRoles.includes(role));
+      el.className = 'chip ' + (differs ? 'fail' : isNone ? 'warn' : 'info');
+      el.textContent = isNone ? '承認不要' : LABELS[role];
+      node.append(el);
+    });
+  }
+
+  function render() {
+    const req = readRequest(), defects = readDefects();
+    const impl = evaluate(req, defects);
+    const spec = oracleEvaluate(req);
+
+    const implAmount = formatYen(req.amount, defects);
+    const implTax = formatYen(impl.deductibleTax, defects);
+    const specAmount = oracleYen(req.amount);
+    const specTax = oracleYen(spec.deductibleTax);
+
+    paintSteps($('impl-steps'), impl.approvers, spec.approvers);
+    paintSteps($('orc-steps'), spec.approvers, null);
+
+    $('impl-amount').textContent = implAmount;
+    $('impl-tax').textContent = implTax;
+    $('orc-amount').textContent = specAmount;
+    $('orc-tax').textContent = specTax;
+
+    const amountDiff = implAmount !== specAmount;
+    const taxDiff = implTax !== specTax;
+    const stepDiff = impl.approvers.join('>') !== spec.approvers.join('>');
+
+    $('row-amount').classList.toggle('diff', amountDiff);
+    $('row-tax').classList.toggle('diff', taxDiff);
+
+    const chip = $('verdict-chip');
+    if (amountDiff || taxDiff || stepDiff) {
+      chip.className = 'chip fail';
+      const which = [stepDiff && '承認ステップ', amountDiff && '金額表示', taxDiff && '控除税額'].filter(Boolean);
+      chip.textContent = '仕様と不一致 — ' + which.join('・');
+    } else {
+      chip.className = 'chip pass';
+      chip.textContent = '仕様に適合';
+    }
+  }
+
+  ['p-amount', 'p-category', 'p-grade', 'p-receipt', 'p-foreign', 'd1', 'd2', 'd3']
+    .forEach((id) => { $(id).addEventListener('input', render); $(id).addEventListener('change', render); });
+
+  /* ══════════════════════════════════════════════════════════
+     ページ内での監査実行
+     ══════════════════════════════════════════════════════════ */
+  const log = $('log');
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const write = (lines) => { log.innerHTML = lines.join('\n'); log.scrollTop = 0; };
+
+  const AMOUNTS = [0, 1, 2999, 3000, 3001, 10000, 11000, 50000, 99999, 100000, 100001,
+                   500000, 999999, 1000000, 1000001, 5000000];
+  const CATEGORIES = ['travel', 'entertainment', 'supplies', 'other'];
+  const GRADES = ['staff', 'manager', 'director'];
+
+  $('run-conformance').addEventListener('click', () => {
+    const defects = readDefects();
+    const started = performance.now();
+    const out = [];
+    let total = 0, bad = 0;
+    const groups = new Map();
+
+    for (const amount of AMOUNTS)
+      for (const category of CATEGORIES)
+        for (const applicantGrade of GRADES)
+          for (const hasReceipt of [true, false])
+            for (const isForeign of [true, false]) {
+              const c = { amount, category, applicantGrade, hasReceipt, isForeign };
+              total++;
+              const a = evaluate(c, defects), e = oracleEvaluate(c);
+              const stepDiff = a.approvers.join('>') !== e.approvers.join('>');
+              const taxDiff = a.deductibleTax !== e.deductibleTax;
+              const fmtDiff = formatYen(a.deductibleTax, defects) !== oracleYen(e.deductibleTax)
+                           || formatYen(c.amount, defects) !== oracleYen(c.amount);
+              if (stepDiff || taxDiff || fmtDiff) {
+                bad++;
+                const key = JSON.stringify([a.approvers, e.approvers, fmtDiff]);
+                if (!groups.has(key)) groups.set(key, { count: 0, sample: c, a, e, fmtDiff });
+                groups.get(key).count++;
+              }
+            }
+
+    const ms = (performance.now() - started).toFixed(1);
+    out.push('<span class="dim">$ npm run audit:spec  (in-browser)</span>');
+    out.push('検証ケース数: ' + total);
+    out.push('欠陥注入    : ' + (Object.entries(defects).filter(([, v]) => v).map(([k]) => k.toUpperCase()).join(', ') || 'なし'));
+    out.push('所要時間    : ' + ms + ' ms');
+    out.push('');
+    if (bad === 0) {
+      out.push('<span class="ok">✓ 差分 0 件 — 実装は SPEC.md に適合しています。</span>');
+    } else {
+      out.push('<span class="ng">✗ 差分 ' + bad + ' 件 / ' + groups.size + ' パターン</span>');
+      out.push('');
+      [...groups.values()].sort((x, y) => y.count - x.count).slice(0, 6).forEach((g, i) => {
+        out.push('<span class="ng">--- パターン ' + (i + 1) + ' (' + g.count + ' 件) ---</span>');
+        out.push('  入力例  : ' + esc(JSON.stringify(g.sample)));
+        out.push('  実装    : ' + esc(JSON.stringify(g.a.approvers)) + '  表示=' + esc(formatYen(g.a.deductibleTax, defects)));
+        out.push('  仕様期待: ' + esc(JSON.stringify(g.e.approvers)) + '  表示=' + esc(oracleYen(g.e.deductibleTax)));
+      });
+      if (groups.size > 6) out.push('<span class="dim">  … 他 ' + (groups.size - 6) + ' パターン</span>');
+    }
+    write(out);
+    $('run-status').textContent = bad === 0 ? '適合' : bad + ' 件の不一致';
+  });
+
+  $('run-tests').addEventListener('click', () => {
+    const defects = readDefects();
+    const base = { amount: 5000, category: 'supplies', applicantGrade: 'staff', hasReceipt: true, isForeign: false };
+    const r = (o) => ({ ...base, ...o });
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const A = (req) => resolveApprovers(req, defects);
+
+    const cases = [
+      ['R0: 既定は manager 承認のみ', () => eq(A(r({})), ['manager'])],
+      ['R1: 50,000円では director 不要', () => eq(A(r({ amount: 50000 })), ['manager'])],
+      ['R1: 150,000円では director 必要', () => eq(A(r({ amount: 150000 })), ['manager', 'director'])],
+      ['R1 境界: 99,999円では director 不要', () => eq(A(r({ amount: 99999 })), ['manager'])],
+      ['R1 境界: ちょうど100,000円で director 必要', () => eq(A(r({ amount: 100000 })), ['manager', 'director'])],
+      ['R2: 1,500,000円で executive 必要', () => eq(A(r({ amount: 1500000 })), ['manager', 'director', 'executive'])],
+      ['R2 境界: ちょうど1,000,000円で executive 必要', () => A(r({ amount: 1000000 })).includes('executive')],
+      ['R3: 交際費は compliance 承認', () => eq(A(r({ category: 'entertainment' })), ['manager', 'compliance'])],
+      ['R4: 領収書なしは accounting 確認', () => eq(A(r({ hasReceipt: false })), ['manager', 'accounting'])],
+      ['R4: 3,000円未満は accounting 不要', () => eq(A(r({ amount: 2999, hasReceipt: false })), ['manager'])],
+      ['R5: manager 本人は manager 承認を除外', () => eq(A(r({ amount: 150000, applicantGrade: 'manager' })), ['director'])],
+      ['R5: director 本人は manager・director とも除外', () => eq(A(r({ amount: 150000, applicantGrade: 'director' })), [])],
+      ['R5: 職能承認者は役職に関わらず除外しない',
+        () => eq(A(r({ amount: 150000, category: 'entertainment', applicantGrade: 'director', hasReceipt: false })), ['compliance', 'accounting'])],
+      ['消費税: 11,000円 → 1,000円', () => deductibleTax(r({ amount: 11000 })) === 1000],
+      ['消費税: 端数は切り捨て(10,000円 → 909円)', () => deductibleTax(r({ amount: 10000 })) === 909],
+      ['消費税: 国外取引は 0円', () => deductibleTax(r({ amount: 11000, isForeign: true })) === 0],
+      ['表示: 2,999円は「¥2,999」と表示する', () => formatYen(2999, defects) === '¥2,999'],
+    ];
+
+    const out = ['<span class="dim">$ npm test  (in-browser)</span>', ''];
+    let pass = 0;
+    cases.forEach((c, i) => {
+      let ok = false;
+      try { ok = !!c[1](); } catch (_) { ok = false; }
+      if (ok) pass++;
+      out.push((ok ? '<span class="ok">ok  ' : '<span class="ng">not ok ') + (i + 1) + ' - ' + esc(c[0]) + '</span>');
+    });
+    out.push('');
+    out.push('# tests ' + cases.length);
+    out.push((pass === cases.length ? '<span class="ok">' : '<span class="dim">') + '# pass  ' + pass + '</span>');
+    out.push((pass === cases.length ? '<span class="dim">' : '<span class="ng">') + '# fail  ' + (cases.length - pass) + '</span>');
+    write(out);
+    $('run-status').textContent = pass + ' / ' + cases.length + ' pass';
+  });
+
+  render();
+})();
+</script>
