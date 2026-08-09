@@ -1,6 +1,8 @@
 # CCPM 非互換仮説の外部裏付け／反証レビュー
 
-**調査日: 2026-08-09 / 対象: [`docs/ccpm-addendum.md`](./ccpm-addendum.md) 第 3 章で挙げた「CCPM が Claude Code クラウドで動かないであろう事象」**
+**調査日: 2026-08-09 / 位置づけ: [`docs/ccpm-addendum.md`](./ccpm-addendum.md)（正典）の付録 B — 出典と裏付け／反証の突き合わせ**
+
+> **読む順序について。** 現時点の結論だけが必要なら正典の方を読めばよい。本書はその結論に至る根拠を、支持する情報と否定する情報の双方から検証した記録である。仮説番号は正典の**初版**の第 3 章に対応しており、正典本文は本書の検証結果を反映して既に書き換わっている。
 
 前回までの検証はすべて**このセッション内での実測**だった。本レポートはそれを離れ、公式ドキュメント・CCPM 本体のソースと Issue・GitHub CLI のソースと Issue・anthropics/claude-code の Issue・第三者の実践記事をインターネットから広く収集し、**各仮説を裏付ける情報と否定する情報の双方**を突き合わせたものである。
 
@@ -443,7 +445,26 @@ send-pack: unexpected disconnect while reading sideband packet
 fatal: the remote end hung up unexpectedly
 ```
 
-`git push origin :refs/heads/<name>` の形式でも同じ。直後に同じブランチへの更新 push を試すと成功するため、経路や認証の問題ではなく**削除という操作そのものが拒否されている**。他の 403 と違い説明文を含まず、sideband が切断される形で返る点も特徴的である。GitHub MCP サーバにもブランチ削除ツールは存在しない。
+`git push origin :refs/heads/<name>` の形式でも同じ。直後に同じブランチへの更新 push を試すと成功するため、経路や認証の問題ではない。
+
+**3 経路すべてで不可、しかも理由が異なる。**
+
+| 経路 | 結果 | 返る理由 |
+| --- | --- | --- |
+| git protocol | 不可 | 説明文なしの 403、sideband 切断 |
+| REST（`gh api --method DELETE .../git/refs/heads/x`） | 不可 | `Write access to this GitHub API path is not permitted through this proxy.` |
+| GitHub MCP | 不可 | ブランチ／ref 削除ツールが存在しない（403 以前の問題） |
+
+REST 側をさらに切り分けると、ブロックされているのは **DELETE という動詞ではなく `git/refs` というパス**だった。
+
+```
+DELETE repos/{o}/{r}/git/refs/heads/xxx → Write access to this GitHub API path is not permitted
+DELETE repos/{o}/{r}/labels/xxx         → GitHub access is not enabled for this session（repo スコープ 403）
+PATCH  repos/{o}/{r}/git/refs/heads/xxx → Write access to this GitHub API path is not permitted
+DELETE repos/cli/cli/git/refs/heads/xxx → Write access to this GitHub API path is not permitted（未アタッチ repo でも同じ）
+```
+
+未アタッチのリポジトリに対しても repo スコープ 403 ではなくこちらが返るため、**このパス単位の書き込み判定は repo スコープより前に走る**。プロキシのゲートは 4 層あることになる — 一般 egress / GraphQL pinned set / **API パス単位の書き込み許可** / repo スコープ。
 
 **CCPM への含意:** epic 完了後にタスクブランチを整理する処理はクラウドから実行できない。ブランチが残り続ける前提にするか、削除を GitHub UI・ローカル・GitHub Actions のいずれかへ逃がす必要がある。
 
