@@ -342,6 +342,50 @@ MCP 経路で**契約と機能は確定した**が、**REST 経路そのもの�
 
 `docs/examples/ccpm-subissue-rest.sh experiment` をローカルまたは API 直接経路が有効なサーフェスで実行すれば確定する。CCPM の bash スクリプト層をクラウドで使えるかは、この 1 点にかかっている。
 
+### 3.10 追試 — ネットワークポリシーを開放しても GitHub API ゲートは変わらない【実測】
+
+**調査日: 2026-08-09 / 別セッション（`claude/ccpm-verification-check-lfny0d`）**
+
+3.8 では repo スコープ 403 の原因を「起動サーフェスの構成」と結論した。これを、**一般の外向き通信ポリシーを開放した環境**で追試し、両者が独立していることを切り分けた。
+
+#### 開いていた側
+
+`GET $HTTPS_PROXY/__agentproxy/status` は `"selective": false`（ドメイン許可リストなし）を返し、実際に一般宛の通信が通る。
+
+| 宛先 | 結果 |
+| --- | --- |
+| `example.com` / `google.com` / `pypi.org` / `raw.githubusercontent.com` | 200 |
+| `api.openai.com` | 401（= 到達している） |
+| `git ls-remote https://github.com/cli/cli`（未アタッチのリポジトリ） | 成功 |
+| `apt-get install -y gh` | 成功（2.45.0） |
+
+#### 閉じたままだった側
+
+同一セッションで `docs/examples/ccpm-subissue-rest.sh check` と生 curl を流した結果は、**3.7 の表と全項目一致**した。
+
+| 呼び出し | 3.10（ネットワーク開放後） | 3.7 |
+| --- | --- | --- |
+| `GET /user` | 200 `Sut103` | 200 |
+| `GET /rate_limit` | 200（15000） | 200 |
+| `GET /repos/{owner}/{repo}` | **403** | 403 |
+| `GET /repos/{owner}/{repo}/contents/README.md` | **403** | 403 |
+| `GET /repos/{owner}/{repo}/issues` | **403** | 403 |
+| `POST /graphql` | **403** pinned-set | 403 |
+| `GET /user/repos` | **403** sessions are bound to… | 403 |
+| `gh issue list` / `gh repo view` | **403** GraphQL pinned-set | 403 |
+| `git ls-remote` / `git push` | 成功 | 成功 |
+
+#### 結論 — プロキシには独立した 2 層がある
+
+| 層 | 制御主体 | 今回の状態 |
+| --- | --- | --- |
+| 一般の外向き通信ポリシー | 環境設定（作成時に選ぶ network policy） | **無制限。設定変更が効いている** |
+| GitHub API ゲート | 起動サーフェスの構成 | **不変。ネットワークを開けても動かない** |
+
+3.8 の訂正をさらに一段絞り込む結果である。**repo スコープ 403 は GitHub App の問題でもなく、ネットワークポリシーの問題でもない。** エラー文の「An org admin must connect the Claude GitHub App」は、この構成では引き続き実態を表していない（App は接続済みで、3.9 のとおり MCP 経由では現に書き込みが成功している）。
+
+**CCPM 運用上の含意:** 「クラウドで `gh api` REST が使えないなら、環境のネットワーク設定を緩めればよい」という回避策は**成立しない**。3.8 の推奨（チームが実際に使うサーフェスで 1 回実測する）は変わらず有効で、その実測項目に「ネットワークポリシーは判断材料にならない」を追記する。3.9 で残った未検証の 1 点も、依然としてこのサーフェスでは確定できない。
+
 ---
 
 ## 4. CCPM 導入後の推奨アーキテクチャ
