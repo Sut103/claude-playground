@@ -232,9 +232,9 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 **(1) `gh` の高レベルサブコマンドは内部で GraphQL を使うため、クラウドセッションでは軒並み動かない。**
 `gh issue list` と `gh repo view` が返したのは repo スコープの 403 ではなく、**GraphQL の pinned-set 制限**だった。つまり `gh sub-issue` だけの問題ではない。**CCPM のスクリプトが `gh issue list` / `gh issue view` / `gh repo view` を使っている箇所はすべて書き換えが要る。** 使えるのは `gh api` + REST パスだけである。これは 3.1 で見積もっていたより影響範囲が広い。
 
-**(2) REST にも 3 段のゲートがある。**
+**(2) REST にも複数段のゲートがある。**
 - **ユーザ/グローバルスコープ**（`user`、`rate_limit`）は通る。資格情報の差し替え自体は正常に機能している
-- **リポジトリスコープ**は Claude GitHub App が org に接続されていることが前提。未接続だと、セッションにアタッチ済みのリポジトリであっても 403
+- **リポジトリスコープ**は 403。エラー文は「Claude GitHub App を org に接続せよ」と言うが、**これは誤解を招く表示である**（下記 3.8）
 - **横断列挙エンドポイント**（`user/repos` など）はそもそも提供されない。`repos/{owner}/{repo}/...` の形に限られる
 
 **(3) git 自体は別系統で、影響を受けない。** clone / fetch / push は通常どおり動く。詰まるのは GitHub **API** の経路だけである。
@@ -259,17 +259,44 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 
 `gh repo view` を避けて `git remote` からリポジトリ名を導出しているのも、(1) の制約への対応である。
 
-#### 3.6 の推奨の修正
+### 3.8 訂正 — 403 の原因は GitHub App ではなく「起動サーフェス」だった【実測】
 
-「`gh api` の REST に寄せる」は**依然として正しいが、前提条件が付く**。
+3.7 では repo スコープの 403 を「Claude GitHub App が org に未接続だから」と判断したが、**これは誤りだった**。リポジトリ所有者に確認したところ App は接続済みであり、追加検証でも次のとおり矛盾しない結果が出た。
 
-| 環境 | 使える経路 | CCPM への影響 |
+| 確認項目 | 結果 |
+| --- | --- |
+| Claude GitHub App の接続 | **接続済み**（所有者確認） |
+| セッションへのリポジトリ添付 | **push スコープで添付済み**（`add_repo` が `already_present` を返す） |
+| `git ls-remote` / `git push` | **成功**（git 経路は正常） |
+| `gh api user` | **200** |
+| `gh api repos/{owner}/{repo}`（大文字・小文字とも） | **403** |
+| `gh api repos/{owner}/{repo}/contents/README.md` | **403** |
+
+つまり **App も添付も git も正常なのに、repo スコープの GitHub API だけが通らない**。エラー文の「An org admin must connect the Claude GitHub App」は、この状況では実態を表していない。
+
+原因は**セッションを起動したサーフェスの構成**である。本セッションは Claude Code Remote 系のサーフェスで動いており、その構成では **VM 内からの GitHub API 直接アクセスが設計上無効化され、GitHub への到達は MCP サーバ経由に一本化されている**（セッション自身のシステムプロンプトにも「直接の GitHub API アクセスは無い、GitHub MCP ツールを使え」と明記されている）。`add_repo` を `access=push` で呼び直しても状況は変わらなかった。
+
+#### これが CCPM にとって意味すること
+
+3.7 で書いた「App 接続が前提条件」よりも、**さらに厄介な事実**が出てきた。
+
+> **GitHub API の到達性は「Claude Code がクラウドで動いているか」ではなく、「どのサーフェスがそのセッションを起動したか」で決まる。**
+
+同じアカウント・同じリポジトリ・同じ GitHub App でも、起動元が違えば `gh api` が通ったり通らなかったりする。CCPM の運用上、これは次を意味する。
+
+1. **「クラウドでは `gh api` REST を使う」という前提を一般化できない。** チームが使うサーフェスを固定し、そこで実測して初めて前提にできる
+2. **preflight チェックを必須にする。** epic の同期が途中まで進んで失敗すると、Issue とローカルのタスクファイルの整合が崩れる。`ccpm-subissue-rest.sh check` 相当を同期処理の先頭で必ず走らせ、通らなければ**何も書き込まずに中断**する設計にする
+3. **サーフェスをまたいで運用するなら二経路を持つしかない。** スクリプト用（`gh api` REST）とモデル用（MCP ツール）の両方を実装し、preflight の結果で切り替える。これは CCPM の「決定的処理は bash」という思想を部分的に諦めることを意味する
+
+#### 3.6 / 3.7 の推奨の最終形
+
+| 実行環境 | 使える経路 | CCPM への影響 |
 | --- | --- | --- |
 | ローカル | `gh` 全機能 + REST | 無改修で動く |
-| クラウド + GitHub App 接続済み | **`gh api` REST のみ**（高レベルサブコマンドは不可） | スクリプトを `gh api` 形式に書き換えれば、ローカルと同一コードで動く |
-| クラウド + App 未接続 | **MCP ツールのみ** | bash スクリプト層が使えない。モデル駆動に倒すしかなく、CCPM の設計上の利点が大きく削がれる |
+| クラウド（API 直接経路が有効なサーフェス） | **`gh api` REST のみ**（高レベルサブコマンドは不可） | スクリプトを `gh api` 形式に書き換えれば、ローカルと同一コードで動く |
+| クラウド（API 直接経路が無効なサーフェス） | **MCP ツールのみ** | bash スクリプト層が使えない。モデル駆動に倒すしかなく、CCPM の設計上の利点が大きく削がれる |
 
-つまり **Claude GitHub App の org への接続は、CCPM をクラウドで運用するための実質的な前提条件**である。Phase 1 の最初に確認すべき項目として扱うこと。
+判断のために必要なのは App の接続確認ではなく、**チームが実際に使うサーフェスで `gh api repos/{owner}/{repo}` が通るかを 1 回測ること**である。所要 1 分で、Phase 1 の最初にやるべき項目はこれに置き換わる。
 
 ---
 
@@ -315,7 +342,8 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 前回の項目に加えて:
 - CCPM skill を `.claude/skills/ccpm/` に**実ファイルとして** vendoring する（3.4）
 - Cloud environment の setup script に `gh` の導入を追加する（3.2）
-- **Claude GitHub App が org に接続されているか最初に確認する**（3.7）。未接続だとクラウドから `gh api` の REST が一切通らず、CCPM の bash スクリプト層が丸ごと使えなくなる
+- **チームが実際に使うサーフェスで `gh api repos/{owner}/{repo}` が通るかを 1 回測る**（3.8）。App の接続確認では不十分で、起動サーフェスによって結果が変わる。通らなければ CCPM の bash スクリプト層が丸ごと使えない
+- **同期処理の先頭に preflight チェックを入れ、通らなければ何も書き込まずに中断する**（3.8）。中途半端な同期は Issue とタスクファイルの整合を壊す
 - CCPM のスクリプトを監査し、`GITHUB_TOKEN` 直読みと GraphQL 依存箇所を洗い出す（3.1 / 3.2）
 - **`gh` の高レベルサブコマンド（`gh issue list` / `gh issue view` / `gh repo view` 等）を `gh api` の REST 形式に書き換える**（3.7）。`gh sub-issue` だけの問題ではない
 - `docs/examples/ccpm-subissue-rest.sh` を雛形に、sub-issue 操作を REST 実装に差し替える
