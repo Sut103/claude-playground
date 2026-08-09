@@ -92,11 +92,11 @@ HTTP 403
 
 **影響:** `epic-sync` が sub-issue を作れず、CCPM のタスクリスト fallback になる。Epic の階層が平坦化し、Issue 一覧の見通しが落ちる。
 
-**対策（上から順に推奨）:**
+**対策の優先順位は 3.6 の検証結果を踏まえて次のとおり:**
 
-1. **`epic-sync` だけローカルで実行する。** 最も単純で、CCPM のワークフロー上も自然（分解と同期は設計フェーズであり、そもそもローカル向き）。
-2. **組み込みの GitHub ツールに迂回させる。** クラウドセッションには sub-issue 操作を含む GitHub ツールが組み込まれており、これはプロキシの GraphQL 制限とは別経路。CCPM のスクリプトが `gh` を直接叩く箇所を、エージェント側のツール呼び出しに置き換える。
-3. **REST の `/repos/{owner}/{repo}/issues/{n}/sub_issues` に差し替える。** ただし issue number ではなく issue **id** が必要。※本セッションでは組織側の GitHub App 接続状態の関係で REST 自体が別理由の 403 を返したため、**この経路が通るかは各自の環境で要検証**。
+1. **`gh api` の REST 呼び出しに差し替える。** bash スクリプトのまま、ローカルでもクラウドでも同一コードで動く唯一の解（3.6 参照）。
+2. **モデルが判断しながら行う操作は組み込み MCP ツールに寄せる。** プロキシの GraphQL 制限を受けない別経路であることを実測済み（3.6）。
+3. **`epic-sync` だけローカルで実行する。** 暫定回避としては最も単純。
 4. **fallback のまま運用する。** CCPM は元々 fallback を持つので動きはする。
 
 ### 3.2 `gh` CLI が pre-install されていない【実測・要対策】
@@ -155,6 +155,60 @@ Routines の GitHub トリガが対応するイベントは **Pull request と R
 - または**スケジュール実行**で未着手 Issue をポーリングする。
 - 注意: `text` として渡した内容は `<routine-fire-payload>` で untrusted としてラップされる。routine の prompt 側で「payload を参照して動け」と明示しないと、不活性なコンテキスト扱いになって無視される。
 
+### 3.6 補論 — GitHub への到達経路は 3 つあり、詰まるのは 1 つだけ【実測】
+
+3.1 を受けて「`gh` ではなくクラウドセッションに組み込まれた MCP を使えばよいのでは」という検討を行い、同一セッション内で読み取り専用の比較検証をした。
+
+```
+# (A) VM 内から直接叩く経路 ── CCPM の gh スクリプトが使う経路
+$ curl .../graphql        → 403  "This GraphQL query is not enabled for this session"
+$ curl .../repos/{o}/{r}  → 403  "GitHub access is not enabled for this session"
+
+# (B) 組み込み GitHub MCP ツール経由
+mcp__github__get_me          → 200  認証済みユーザのプロフィールを返す
+mcp__github__list_issues     → 200  ページングが pageInfo / endCursor 形式
+mcp__github__sub_issue_write → add / remove / reprioritize を提供
+```
+
+**結果: 同一セッション内で、VM から直接叩くと 403 になる操作が MCP ツール経由では通る。** これはドキュメントの「connector traffic travels through Anthropic's servers rather than the session's network」と整合する。しかも `list_issues` のページング契約が `pageInfo` / `endCursor` という GraphQL の形をしていることから、**MCP サーバ自体はサーバ側で GraphQL を使っており、それが正常に動いている**。VM 内プロキシの GraphQL 制限とは無関係の経路である。
+
+**したがってボトルネックは `gh` ではなく「VM 内から GitHub API を直接叩く経路」だった。** 3.1 の記述はこの点で不正確だったので上記のとおり優先順位を改めた。
+
+> 書き込み（実際に sub-issue を張る）は未検証。リポジトリに Issue を作成する操作になるため実行していない。読み取り側の結果と `sub_issue_write` の存在から通る見込みは高いが、本番投入前に検証用リポジトリで確認すること。
+
+#### ただし MCP は `gh` の単純な代替にはならない
+
+| 差分 | 内容 |
+| --- | --- |
+| **呼び出し主体** | `gh` は bash スクリプトから呼べる。MCP ツールは**モデルしか呼べない**。CCPM は「決定的な処理は LLM を通さず bash で」という設計思想を持ち、14 以上のスクリプトがその実装。MCP に寄せるとこの層が使えなくなる |
+| **コストと決定性** | Issue 操作 1 回ごとにモデルのターンを消費する。10 タスクの一括同期のようなループがモデルの根気に依存し、非決定的になる |
+| **ID 体系** | `sub_issue_write` は issue number ではなく **`sub_issue_id`** を要求する。CCPM のタスクファイルは Issue 番号でリネームされる設計なので、番号 → ID の解決が一段挟まる |
+| **二重実装** | ローカルは `gh`、クラウドは MCP、では「同じ仕様がどこでも動く」という CCPM の利点が崩れる。※ローカル側で GitHub MCP server を `.mcp.json`（project scope）に追加すれば経路を統一できるが、認証は PAT などの別管理になる |
+
+#### より良い解 — プロキシのエラーメッセージ自体が答えを言っている
+
+```
+Use REST via `gh api repos/{owner}/{repo}/...` instead.
+```
+
+GitHub には sub-issues の REST エンドポイントがある。
+
+```
+POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_issue_id）
+```
+
+つまり **`gh sub-issue add` を `gh api` の REST 呼び出しに置き換えれば、bash スクリプトのまま、ローカルとクラウドで同一コードが動く。** CCPM の設計を壊さない解はこれである。ID 解決は `gh api repos/{o}/{r}/issues/{n} --jq .id` で一行で済む。
+
+#### 推奨 — 「MCP か gh か」ではなく「誰が呼ぶか」で分ける
+
+| 層 | 使うもの | 理由 |
+| --- | --- | --- |
+| CCPM の決定的スクリプト（status / standup / 検索 / ファイル操作） | 素の bash + git | そもそも GitHub API に触らない。どこでも動く |
+| GitHub への一括同期（`epic-sync` などループを伴うもの） | **`gh api` の REST** | スクリプトから呼べる・決定的・ローカルとクラウドで同一コード |
+| モデルが文脈を見て行う個別操作（Issue コメント、状況に応じた sub-issue 張り替え、PR 作成） | **組み込み MCP ツール** | プロキシ制限を受けない・認証設定不要・引数を文脈から組める |
+
+この分け方なら、CCPM の「決定的な処理は bash で」という設計を保ったまま、モデル駆動の部分だけ MCP の利点（プロキシ迂回・ゼロ設定認証）を取り込める。
+
 ---
 
 ## 4. CCPM 導入後の推奨アーキテクチャ
@@ -200,6 +254,8 @@ Routines の GitHub トリガが対応するイベントは **Pull request と R
 - CCPM skill を `.claude/skills/ccpm/` に**実ファイルとして** vendoring する（3.4）
 - Cloud environment の setup script に `gh` の導入を追加する（3.2）
 - CCPM のスクリプトを監査し、`GITHUB_TOKEN` 直読みと GraphQL 依存箇所を洗い出す（3.1 / 3.2）
+- **`gh sub-issue` 依存を `gh api` の REST 呼び出しに差し替える**（3.6）。検証用リポジトリで書き込みまで通ることを確認してから本番へ
+- モデル駆動の GitHub 操作は組み込み MCP ツールを使う方針を `CLAUDE.md` に明記する（3.6）
 - 「1 Issue = 1 クラウドセッション」を起動する定型プロンプトを `.claude/commands/` に用意する（3.3）
 - **CCPM に乗せる閾値を決める。** 並列可能タスクが 3 本以上ある epic のみ CCPM を通す、など。小さな修正に PRD は過剰
 
@@ -245,6 +301,7 @@ CCPM 本来の並列度を 1 マシンで出したいなら、Anthropic ホス�
 - **ローカルが必要な理由は変わらない。** 物理制約（リソース・到達範囲・シークレット・SSO）は CCPM では解けない。
 - **ただし CCPM は、前回提案した「ルーティング設計」を実装する最良の手段である。** ローカルとクラウドの往復を、口頭の運用ルールではなく**仕様ファイルと Issue 状態**として表現できる。
 - **on the Web で使うなら、3.1〜3.5 の 5 点を Phase 1 で先に潰すこと。**
+- **GitHub 到達の詰まりは `gh` そのものではなく「VM 内から直接叩く経路」だった（3.6・実測）。** 迂回路は 2 つあり、`gh api` の REST（スクリプト用）と組み込み MCP ツール（モデル用）を、**呼び出し主体で使い分ける**のが正解。CCPM の「決定的処理は bash」という設計を保てるのは前者だけである。
 - **最重要の読み替えは 3.3。** CCPM の並列モデルを「worktree 並列」ではなく「1 タスク = 1 クラウドセッション、協調は GitHub Issues」として解釈する。これは CCPM の設計思想から外れておらず、むしろクラウドでは VM 隔離のほうが worktree より強い分離を与える。
 
 CCPM 導入後の役割分担は、前回の結論をより鮮明にする。**ローカルは「仕様を決める場所」、クラウドは「仕様を実行する場所」、GitHub Issues は「両者をつなぐ唯一の真実」。**
