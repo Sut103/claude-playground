@@ -209,6 +209,68 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 
 この分け方なら、CCPM の「決定的な処理は bash で」という設計を保ったまま、モデル駆動の部分だけ MCP の利点（プロキシ迂回・ゼロ設定認証）を取り込める。
 
+### 3.7 REST 経路の実地検証 — `gh` サブコマンドは軒並み GraphQL を使う【実測】
+
+3.6 の「`gh api` の REST に寄せる」という結論を、実際に `gh` を導入して検証した。**結果として当初の推奨は条件付きに修正が必要**である。
+
+`apt-get install -y gh` は Ubuntu リポジトリから成功する（2.45.0）。その上でプロキシの許可境界を測った。
+
+| 呼び出し | 結果 |
+| --- | --- |
+| `gh api user` | **200** `Sut103` |
+| `gh api rate_limit` | **200** `15000` |
+| `gh api repos/{owner}/{repo}` | **403** `GitHub access is not enabled for this session. An org admin must connect the Claude GitHub App for this organization.` |
+| `gh api repos/cli/cli`（未アタッチのリポジトリ） | **403** `GitHub access to this repository is not enabled for this session. Use add_repo to request access.` |
+| `gh api user/repos`（横断列挙） | **403** `This GitHub API path is not available: sessions are bound to their configured repositories.` |
+| `gh api graphql` | **403** pinned-set 制限 |
+| `gh issue list` | **403 GraphQL の pinned-set 制限** |
+| `gh repo view` | **403 GraphQL の pinned-set 制限** |
+| `git ls-remote` / `git push`（対照） | **成功** |
+
+#### 判明したこと
+
+**(1) `gh` の高レベルサブコマンドは内部で GraphQL を使うため、クラウドセッションでは軒並み動かない。**
+`gh issue list` と `gh repo view` が返したのは repo スコープの 403 ではなく、**GraphQL の pinned-set 制限**だった。つまり `gh sub-issue` だけの問題ではない。**CCPM のスクリプトが `gh issue list` / `gh issue view` / `gh repo view` を使っている箇所はすべて書き換えが要る。** 使えるのは `gh api` + REST パスだけである。これは 3.1 で見積もっていたより影響範囲が広い。
+
+**(2) REST にも 3 段のゲートがある。**
+- **ユーザ/グローバルスコープ**（`user`、`rate_limit`）は通る。資格情報の差し替え自体は正常に機能している
+- **リポジトリスコープ**は Claude GitHub App が org に接続されていることが前提。未接続だと、セッションにアタッチ済みのリポジトリであっても 403
+- **横断列挙エンドポイント**（`user/repos` など）はそもそも提供されない。`repos/{owner}/{repo}/...` の形に限られる
+
+**(3) git 自体は別系統で、影響を受けない。** clone / fetch / push は通常どおり動く。詰まるのは GitHub **API** の経路だけである。
+
+#### 本セッションでは実験を完了できなかった
+
+親子 Issue を REST だけで紐づける実験は、上記 (2) の org ゲートにより `repos/{owner}/{repo}/issues` の時点で 403 となり実行できなかった。本セッションは GitHub への到達を MCP サーバ経由に限定した構成であり、VM 内からの直接 API 経路が有効化されていない。
+
+実行するには次のいずれかが要る。
+
+1. **Claude GitHub App を org に接続する**（<https://github.com/apps/claude>）。接続後は同じセッションで `gh api` REST が通るようになる見込み
+2. **標準の Claude Code on the Web セッション**（claude.ai/code）で実行する。オンボーディング時に GitHub App を接続していれば有効になっている
+3. **ローカルで `gh auth login` 済みの環境**で実行する。プロキシを介さないので制限を受けない
+
+そのまま流せる実装を [`docs/examples/ccpm-subissue-rest.sh`](./examples/ccpm-subissue-rest.sh) に置いた。GraphQL も `gh` の高レベルサブコマンドも使わず、`gh api` の REST のみで構成してある。
+
+```bash
+./docs/examples/ccpm-subissue-rest.sh check        # どの層で詰まっているかを切り分ける
+./docs/examples/ccpm-subissue-rest.sh experiment   # 親子 Issue を作って REST で紐づけ検証
+./docs/examples/ccpm-subissue-rest.sh add 12 34    # 実運用: #34 を #12 の sub-issue にする
+```
+
+`gh repo view` を避けて `git remote` からリポジトリ名を導出しているのも、(1) の制約への対応である。
+
+#### 3.6 の推奨の修正
+
+「`gh api` の REST に寄せる」は**依然として正しいが、前提条件が付く**。
+
+| 環境 | 使える経路 | CCPM への影響 |
+| --- | --- | --- |
+| ローカル | `gh` 全機能 + REST | 無改修で動く |
+| クラウド + GitHub App 接続済み | **`gh api` REST のみ**（高レベルサブコマンドは不可） | スクリプトを `gh api` 形式に書き換えれば、ローカルと同一コードで動く |
+| クラウド + App 未接続 | **MCP ツールのみ** | bash スクリプト層が使えない。モデル駆動に倒すしかなく、CCPM の設計上の利点が大きく削がれる |
+
+つまり **Claude GitHub App の org への接続は、CCPM をクラウドで運用するための実質的な前提条件**である。Phase 1 の最初に確認すべき項目として扱うこと。
+
 ---
 
 ## 4. CCPM 導入後の推奨アーキテクチャ
@@ -253,8 +315,10 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 前回の項目に加えて:
 - CCPM skill を `.claude/skills/ccpm/` に**実ファイルとして** vendoring する（3.4）
 - Cloud environment の setup script に `gh` の導入を追加する（3.2）
+- **Claude GitHub App が org に接続されているか最初に確認する**（3.7）。未接続だとクラウドから `gh api` の REST が一切通らず、CCPM の bash スクリプト層が丸ごと使えなくなる
 - CCPM のスクリプトを監査し、`GITHUB_TOKEN` 直読みと GraphQL 依存箇所を洗い出す（3.1 / 3.2）
-- **`gh sub-issue` 依存を `gh api` の REST 呼び出しに差し替える**（3.6）。検証用リポジトリで書き込みまで通ることを確認してから本番へ
+- **`gh` の高レベルサブコマンド（`gh issue list` / `gh issue view` / `gh repo view` 等）を `gh api` の REST 形式に書き換える**（3.7）。`gh sub-issue` だけの問題ではない
+- `docs/examples/ccpm-subissue-rest.sh` を雛形に、sub-issue 操作を REST 実装に差し替える
 - モデル駆動の GitHub 操作は組み込み MCP ツールを使う方針を `CLAUDE.md` に明記する（3.6）
 - 「1 Issue = 1 クラウドセッション」を起動する定型プロンプトを `.claude/commands/` に用意する（3.3）
 - **CCPM に乗せる閾値を決める。** 並列可能タスクが 3 本以上ある epic のみ CCPM を通す、など。小さな修正に PRD は過剰
