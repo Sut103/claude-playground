@@ -386,6 +386,49 @@ MCP 経路で**契約と機能は確定した**が、**REST 経路そのもの�
 
 **CCPM 運用上の含意:** 「クラウドで `gh api` REST が使えないなら、環境のネットワーク設定を緩めればよい」という回避策は**成立しない**。3.8 の推奨（チームが実際に使うサーフェスで 1 回実測する）は変わらず有効で、その実測項目に「ネットワークポリシーは判断材料にならない」を追記する。3.9 で残った未検証の 1 点も、依然としてこのサーフェスでは確定できない。
 
+### 3.11 訂正 — push 制限は「現在のブランチのみ」ではなかった【実測】
+
+**調査日: 2026-08-09 / 同セッション**
+
+3.3 は worktree 並列モデルが成立しない根拠の一つとして、次のように書いていた。
+
+> **push 制限:** GitHub プロキシは `git push` を**そのセッションの現在の作業ブランチに対してのみ**許可する。
+
+**これは誤りである。** [`docs/ccpm-evidence-review.md`](./ccpm-evidence-review.md) の調査で公式ドキュメントの記述と食い違うことが判明したため、同一セッションから実際に 7 通りの push を試した。
+
+| # | ブランチ名 | 操作 | 結果 |
+| --- | --- | --- | --- |
+| 1 | `claude/ccpm-probe-a` | 新規作成（refspec） | **成功** |
+| 2 | `claude/ccpm-probe-b` | 新規作成（refspec） | **成功** |
+| 3 | `claude/ccpm-probe-epic/task-1` | 新規作成（`claude/` 配下ネスト） | **成功** |
+| 4 | `ccpm-probe-noprefix` | 新規作成（**プレフィックス無し**） | **成功** |
+| 5 | `feature/ccpm-probe` | 新規作成（別プレフィックス） | **成功** |
+| 6 | `claude/ccpm-probe-a` | **worktree 内**からコミットして更新 | **成功** |
+| 7 | `claude/ccpm-probe-epic/task-2` | **worktree 内**から新規ブランチへ | **成功** |
+
+**1 セッション・1 worktree から、名前を問わず複数ブランチへ push できる。** `claude/` プレフィックスすら必須ではない。これは Routines のドキュメントが定める規則（`claude/` は常に許可、それ以外は「保護ブランチ」「他者の PR がある」「他者のコミットを含む」場合のみ拒否）と整合する。今回のブランチはいずれも新規で自分のコミットのみのため、3 条件のどれにも当たらなかった。
+
+**したがって「push 制限により worktree 並列が成立しない」という 3.3 の主張は取り下げる。** CCPM の epic worktree が複数のタスクブランチを push する構造は、そのままクラウドで動く。
+
+#### ただし削除はできない【新規発見】
+
+検証ブランチの後片付けで、**ブランチ削除だけが一律に 403 で拒否される**ことが分かった。
+
+```
+$ git push origin --delete claude/ccpm-probe-a
+error: RPC failed; HTTP 403 curl 22 The requested URL returned error: 403
+send-pack: unexpected disconnect while reading sideband packet
+fatal: the remote end hung up unexpectedly
+```
+
+`git push origin :refs/heads/<name>` の形式でも同じ。直後に同じブランチへの**更新** push を試すと成功するため、**プロキシは「作成」と「更新」を許可し「削除」だけを拒否している**。エラーは他の 403 と違い説明文を含まず、sideband が切断される形で返る。
+
+**CCPM への含意:** epic 完了後にタスクブランチを整理する処理はクラウドから実行できない。ブランチが残り続けることを前提にするか、削除は GitHub UI・ローカル・Actions のいずれかに逃がす必要がある。
+
+#### 未確定のまま残したもの
+
+**デフォルトブランチ（main）への push は試していない。** `--dry-run` は exit 0 を返したが、git は dry-run では ref 更新コマンド自体を送らないため、プロキシの判定を経ておらず**判定材料にならない**。実push はリポジトリを実際に変更するため実施していない。[anthropics/claude-code#56474](https://github.com/anthropics/claude-code/issues/56474) の報告（harness レベルの恒久ブロック、設定でも解除不可）が唯一の根拠のままである。
+
 ---
 
 ## 4. CCPM 導入後の推奨アーキテクチャ
