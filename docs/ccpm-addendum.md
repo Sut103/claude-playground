@@ -298,6 +298,50 @@ POST /repos/{owner}/{repo}/issues/{issue_number}/sub_issues   （body に sub_is
 
 判断のために必要なのは App の接続確認ではなく、**チームが実際に使うサーフェスで `gh api repos/{owner}/{repo}` が通るかを 1 回測ること**である。所要 1 分で、Phase 1 の最初にやるべき項目はこれに置き換わる。
 
+### 3.9 sub-issue 紐づけの実地検証（MCP 経路）【実測・成功】
+
+REST 経路がこのサーフェスで使えないため、まず MCP 経路で「そもそも CCPM が要求する sub-issue 階層をこのリポジトリで張れるのか」「number → id の変換という契約は本当に必要か」を確定させた。`Sut103/claude-playground` に検証用 Issue を 2 本作成して実施した（検証後クローズ済み）。
+
+| 手順 | 結果 |
+| --- | --- |
+| 親 Issue 作成 | `#1` / `id=5100355234` |
+| 子 Issue 作成 | `#2` / `id=5100355274` |
+| `sub_issue_write(add, issue_number=1, sub_issue_id=5100355274)` | **成功** — `sub_issues_summary: {total: 1, completed: 0}` |
+| `issue_read(get_sub_issues, #1)` | `#2` を返す。子側に `parent_issue_url` が付与される |
+| `issue_read(get_parent, #2)` | `#1` を返す |
+
+**双方向で階層が成立している。** CCPM が前提とする Epic → Task の親子構造は、このリポジトリで問題なく表現できる。
+
+#### 確定した契約と、実装上の収穫
+
+**(1) sub-issue API は issue number ではなく内部 id を要求する。** 3.6 の想定どおりで、これは REST・MCP どちらの経路でも同じである。
+
+**(2) ただし Issue 作成のレスポンスが `id` を返すため、追加の lookup は不要。**
+
+```json
+{"id":"5100355274","url":"https://github.com/Sut103/claude-playground/issues/2"}
+```
+
+CCPM の `epic-sync` は **Issue を自分で作る**側なので、作成時に `id` を捕まえておけば number → id の解決 API を叩く必要がない。**タスク 1 本あたり 1 往復節約できる。** `docs/examples/ccpm-subissue-rest.sh` の `experiment` はこの形に更新した。
+
+```bash
+# 作成と同時に number と id を取る
+read -r num id < <(gh api --method POST "repos/$REPO/issues" \
+  -f title="$title" -f body="$body" --jq '"\(.number) \(.id)"')
+```
+
+既存 Issue を後から紐づける場合（`add` サブコマンド）は従来どおり `gh api repos/{o}/{r}/issues/{n} --jq .id` での解決が要る。
+
+**(3) 実行主体は Claude GitHub App だった。** レスポンスの `performed_via_github_app` が `anthropics/claude`（App ID 1236702）を示しており、App の購読イベントにも `sub_issues` が含まれている。**3.8 の訂正——「repo スコープの 403 は App の問題ではない」——を決定的に裏付ける結果である。** App は接続済みで、現に書き込みを実行している。
+
+#### 残っている未検証部分
+
+MCP 経路で**契約と機能は確定した**が、**REST 経路そのものは未検証のまま**である。残る問いは一つに絞られた。
+
+> `POST /repos/{owner}/{repo}/issues/{n}/sub_issues` が、GitHub App 経由の REST でも同じように通るか。
+
+`docs/examples/ccpm-subissue-rest.sh experiment` をローカルまたは API 直接経路が有効なサーフェスで実行すれば確定する。CCPM の bash スクリプト層をクラウドで使えるかは、この 1 点にかかっている。
+
 ---
 
 ## 4. CCPM 導入後の推奨アーキテクチャ

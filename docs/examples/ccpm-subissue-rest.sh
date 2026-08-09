@@ -110,18 +110,16 @@ cmd_experiment() {
     --jq '.number')
   echo "   parent = #${parent}"
 
-  echo "-- 子 Issue を作成"
-  local child
-  child=$(api --method POST "repos/${REPO}/issues" \
+  # Issue 作成のレスポンスは number と id を両方返すので、
+  # 自分で作った Issue については number -> id の追加 lookup が要らない。
+  # CCPM の epic-sync はまさにこのケースなので、1 タスクあたり 1 往復節約できる。
+  echo "-- 子 Issue を作成（number と id を同時に取得）"
+  local child child_id
+  read -r child child_id < <(api --method POST "repos/${REPO}/issues" \
     -f title='[CCPM検証] 子タスク' \
     -f body='親 Epic の sub-issue になる想定。' \
-    --jq '.number')
-  echo "   child  = #${child}"
-
-  echo "-- 子の内部 id を解決"
-  local child_id
-  child_id="$(issue_id "$child")"
-  echo "   id     = ${child_id}"
+    --jq '"\(.number) \(.id)"')
+  echo "   child  = #${child}  (id=${child_id})"
 
   echo "-- REST で親子リンクを作成"
   api --method POST "repos/${REPO}/issues/${parent}/sub_issues" \
