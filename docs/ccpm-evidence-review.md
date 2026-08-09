@@ -199,7 +199,7 @@ err := client.GraphQL(repo.RepoHost(), query, variables, &response)
 
 #### 裏付け（仮説を支持する側）
 
-**(A) デフォルトブランチへの push は harness レベルで恒久的にブロックされる。** [#56474](https://github.com/anthropics/claude-code/issues/56474) によれば、`settings.json` で明示的に許可しても main への push は通らず、無効化するフラグも環境変数も存在しない。CCPM の `epic-merge`（no-ff で main にマージして push）は**クラウドでは実行できない**。
+**(A) デフォルトブランチへの push は harness レベルで恒久的にブロックされる【後に実測で否定】。** [#56474](https://github.com/anthropics/claude-code/issues/56474) は、`settings.json` で明示的に許可しても main への push は通らず、無効化するフラグも環境変数も存在しないと報告している。**ただし本レポート公開後の実測でこれは支持されなかった** — 孤立コミットによる切り分けで、プロキシも harness も main 宛の push をブロックしていないことが判明した（[addendum 3.5 A](./ccpm-addendum.md)）。**外部 Issue を実測せずに採用した誤りである。**
 
 **(B) `.github/workflows/` は push できない**（#61189）。CCPM を Actions と連携させる拡張は詰まる。
 
@@ -224,7 +224,7 @@ err := client.GraphQL(repo.RepoHost(), query, variables, &response)
 
 **仮説は取り下げ。** CCPM の epic worktree が複数タスクブランチを push する構造は、そのままクラウドで動く。残る制約は 2 つに絞られた。
 
-- **`epic-merge`（main への直接マージ push）は不可** — worktree 並列とは別の話であり、こちらが本質的な壁
+- ~~**`epic-merge`（main への直接マージ push）は不可**~~ — **これも後に実測で否定された**（上記 A）
 - **ブランチ削除が一律 403** — 後片付けがクラウドから実行できない（次章 3.5）
 
 ---
@@ -409,11 +409,11 @@ Claude Code 側も同様で、[公式の Limitations](https://code.claude.com/do
 
 ## 3. 実測でも addendum でも捉えていなかった新しい阻害要因
 
-### 3.1 `epic-merge` がクラウドで完結しない【新規・重大】
+### 3.1 `epic-merge` がクラウドで完結しない【後に縮小】
 
 CCPM の epic 完了処理は main への no-ff マージと push を含む。しかし Claude Code の harness はデフォルトブランチへの push を**恒久的にブロック**し、[#56474](https://github.com/anthropics/claude-code/issues/56474) によれば `settings.json` でも環境変数でも解除できない。
 
-**CCPM のライフサイクルは PRD → Epic → Task → 実装 → `epic-merge` で閉じる設計だが、最後の 1 ステップだけはクラウドで実行できない。** PR 経由に置き換える必要がある。これは仕様変更に相当し、addendum の推奨アーキテクチャ図（第 4 章）にも反映されていない。
+**当初はこれを「ライフサイクルの最後の 1 ステップがクラウドで実行できない」と結論したが、実測により main push のブロックは観測されなかった（3.5 A）。** クラウドで確実に不可なのは**ブランチ削除だけ**であり、`epic-merge` の PR 化は技術的強制ではなく運用判断に落ちる。
 
 ### 3.2 CCPM 本体に未修正の `gh` 依存バグがある【新規】
 
@@ -479,7 +479,7 @@ DELETE repos/cli/cli/git/refs/heads/xxx → Write access to this GitHub API path
 | 3 | `gh issue create` / `comment` / `close` は `-R` 付きで通るか | repo スコープ REST が通るサーフェスで実行 | 5 分 |
 | 4 | 自前 PAT を `GH_TOKEN` に設定すると repo スコープ 403 を回避できるか | 環境変数に PAT を設定して再実行 | 5 分。ドキュメントと #76248 が矛盾している領域 |
 | 5 | `epic-merge` を PR ベースに置換した場合、CCPM の他の処理と整合するか | sync.md / execute.md の読解 | 30 分 |
-| 6 | main への push は本当にブロックされるか | 検証用リポジトリで実 push | 5 分。`--dry-run` は判定材料にならない（ref 更新コマンドを送らないため） |
+| ~~6~~ | ~~main への push は本当にブロックされるか~~ | **実測で決着** — 孤立コミットを push すると 403 ではなく git の non-fast-forward 拒否が返り、GitHub まで到達していた。ブロックは観測されない | 完了 |
 
 ---
 
@@ -489,7 +489,7 @@ DELETE repos/cli/cli/git/refs/heads/xxx → Write access to this GitHub API path
 
 2. **一方、最も重要な仮説 5a（push 制限による worktree 並列の否定）は誤りだった。** 公式ドキュメントとの食い違いから実測したところ、**1 セッション・1 worktree から名前を問わず複数ブランチへ push できた。** `claude/` プレフィックスすら必須ではない。CCPM の worktree 並列モデルは、push の面ではそのままクラウドで動く。
 
-3. **代わりに、CCPM のライフサイクル終端に 2 つの壁があることが判明した。** `epic-merge` の main push は解除手段のない恒久ブロックであり、さらに**ブランチ削除が一律 403 で拒否される**（作成と更新は通る）。epic 完了処理は、マージも後片付けもクラウドの外に出す必要がある。
+3. **ライフサイクル終端の壁は 1 つだけだった。** 当初は `epic-merge` の main push とブランチ削除の 2 つと考えたが、前者は実測でブロックが観測されず取り下げた。**確実に不可なのはブランチ削除**（作成と更新は通る）。後片付けだけがクラウドの外に出る。
 
 4. **CCPM 本体にも未修正の `gh` 依存バグが 2 件あり、クラウド以前の問題として epic-sync がドキュメント通りには動かない。** 導入するなら本体へのパッチ、または `gh api` REST への全面書き換えが前提になる。
 
@@ -500,7 +500,7 @@ DELETE repos/cli/cli/git/refs/heads/xxx → Write access to this GitHub API path
 | ファイル操作・決定的スクリプト（status / standup / 検索） | **無改修で動く** |
 | GitHub 同期（epic-sync / issue-sync） | **書き換え必須**（`gh` 高レベル → `gh api` REST、かつサーフェス依存） |
 | 並列実行（worktree） | **無改修で動く**（複数ブランチ push を実測で確認） |
-| ライフサイクル終端（epic-merge / ブランチ整理） | **書き換え必須**（main push 不可 → PR 経由、ブランチ削除も不可） |
+| ライフサイクル終端（epic-merge / ブランチ整理） | **部分的に書き換え**（ブランチ削除のみ確実に不可。main push はブロック未観測） |
 
 ---
 
@@ -525,7 +525,7 @@ DELETE repos/cli/cli/git/refs/heads/xxx → Write access to this GitHub API path
 - [#76248](https://github.com/anthropics/claude-code/issues/76248) — Cowork/remote の git proxy が PAT pass-through を遮断（`CCR_TEST_GITPROXY`）
 - [#70474](https://github.com/anthropics/claude-code/issues/70474) — routine セッションから GitHub に到達できない
 - [#61189](https://github.com/anthropics/claude-code/issues/61189) — `.github/workflows/` へ push できない
-- [#56474](https://github.com/anthropics/claude-code/issues/56474) — デフォルトブランチ push の恒久ブロック
+- [#56474](https://github.com/anthropics/claude-code/issues/56474) — デフォルトブランチ push の恒久ブロック（**本調査の実測では再現せず**）
 - [#36363](https://github.com/anthropics/claude-code/issues/36363) — ローカル sandbox の TLS で `gh` が壊れる
 - [#24535](https://github.com/anthropics/claude-code/issues/24535) — push は `claude/*` ブランチのみ
 
