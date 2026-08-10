@@ -2,10 +2,10 @@
 name: task-cli
 status: backlog
 created: 2026-08-10T12:23:25Z
-updated: 2026-08-10T12:23:25Z
+updated: 2026-08-10T12:38:39Z
 progress: 0%
 prd: .claude/prds/task-cli.md
-github: (will be set on sync)
+github: https://github.com/Sut103/claude-playground/issues/3
 ---
 
 # Epic: task-cli
@@ -164,13 +164,13 @@ NFR-3 の要求。同一ディレクトリに一時ファイルを作り、書�
 クリティカルパスは 001 → 002 → (003/004/005 の最長) → 006 → 007。003〜005 を並列化することで、逐次実行に対して 1 段分短縮される。
 
 ## Tasks Created
-- [ ] 001.md - プロジェクト構造とテスト基盤のセットアップ (parallel: false)
-- [ ] 002.md - パーサ層 — Task モデルと行の相互変換 (parallel: false)
-- [ ] 003.md - ストア層 — 読み書き、原子的置換、ID 採番 (parallel: true)
-- [ ] 004.md - 表示層 — 並び順、期限状態の判定と整形 (parallel: true)
-- [ ] 005.md - コマンド層 — argparse の骨格と 4 サブコマンド (parallel: true)
-- [ ] 006.md - 結線と E2E テスト — 実際のコマンド実行での通し確認 (parallel: false)
-- [ ] 007.md - 受け入れ確認 — Success Criteria の検証 (parallel: false)
+- [ ] 4.md - プロジェクト構造とテスト基盤のセットアップ (parallel: false)
+- [ ] 5.md - パーサ層 — Task モデルと行の相互変換 (parallel: false)
+- [ ] 6.md - ストア層 — 読み書き、原子的置換、ID 採番 (parallel: true)
+- [ ] 7.md - 表示層 — 並び順、期限状態の判定と整形 (parallel: true)
+- [ ] 8.md - コマンド層 — argparse の骨格と 4 サブコマンド (parallel: true)
+- [ ] 9.md - 結線と E2E テスト — 実際のコマンド実行での通し確認 (parallel: false)
+- [ ] 10.md - 受け入れ確認 — Success Criteria の検証 (parallel: false)
 
 Total tasks: 7
 Parallel tasks: 3
