@@ -1,0 +1,16 @@
+[project]
+name = "taskcli"
+version = "0.1.0"
+description = "AI エージェントと人間が共有する Markdown ベースのタスク管理 CLI"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
