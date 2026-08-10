@@ -2,35 +2,57 @@
 
 **2026-08-09 時点 / 対象: [automazeio/ccpm](https://github.com/automazeio/ccpm)**
 
-この文書は「CCPM をクラウドの Claude Code で使いたい人が、何を直せば動くのか」だけを書いたものである。調査の経緯は載せない。各項目には根拠の種別を付す。
+## 本ガイドの限界（先に読んでください）
 
-- **［実測］** — 実際のクラウドセッションで確認した
-- **［公式］** — Anthropic または GitHub のドキュメントに明記がある
-- **［外部］** — 第三者の報告や未解決 Issue が根拠
-- **［未検証］** — 確認できていない。判断に使うなら自分で測ること
+**本調査では CCPM 自体を一度も起動していません。** インストールもしておらず、`/pm:init` も `epic-sync` も実行していません。確認したのは「環境が何を許し、何を拒むか」であって、「CCPM が通しで動くこと」ではありません。
+
+**CCPM をクラウドの Claude Code で動かしたという報告は、調べた範囲では世の中にも存在しません。** 本ガイドは実測した環境の制約から**演繹した配置案**であり、動作実績の報告ではありません。
+
+そのため、記述には 2 種類のマーカーを付けます。
+
+- **【実証済み】** — 本調査で実際に動かして成功を確認した
+- **【未実証】** — 動くはずだが、成功を観測していない
+
+情報の出所を示す根拠バッジ（［実測］［公式］［外部］）とは別軸です。「実測で 403 を確認した」は情報としては確かでも、**推奨が動く証拠にはならない**ためです。
 
 ---
 
-## 1. 最初にやること — 1 分の到達性テスト
+## 1. 推奨する配置 — CCPM を書き換えない
 
-**これを最初にやらないと、以降の作業量が見積もれない。**
+**結論から言うと、CCPM を書き換える必要はありません。書き換えずに、実行場所を分けることで解けます。**
 
-```bash
-gh api repos/{owner}/{repo}
+```
+[ローカル]   init / PRD / Epic 分解 / epic-sync
+                        │   gh が無改修で動く（上流が想定する環境）
+                        ▼
+              GitHub Issues（source of truth）
+                        │
+[クラウド]    タスク実行
+              Issue の読み書きは MCP ツール【実証済み】
+              bash から GitHub API を叩かない
+                        │
+                       PR
+                        │
+[ローカル / GitHub UI]   マージ・ブランチ整理
 ```
 
-| 結果 | 意味 | 以降の方針 |
-| --- | --- | --- |
-| **200** | VM から GitHub API に直接届く | CCPM の bash スクリプト層を `gh api` REST に書き換えれば、ローカルと同一コードで動く |
-| **403** | 直接経路が無効なサーフェス | bash からは GitHub に触れない。同期処理はローカル固定か、モデル駆動（MCP）に倒すしかない |
+### なぜこれで足りるのか
 
-**重要な注意が 3 つある。**
+CCPM が GitHub に**書き込む**のは `init`（ラベル作成）、`epic-sync`（Issue 作成）、`epic-merge`（Issue クローズ）の 3 か所です。**いずれもローカルで実行できます。** ローカルなら `gh` は無改修で動きます。
 
-1. **GitHub App を org に接続しても変わらない。** 403 のエラー文は「An org admin must connect the Claude GitHub App」と言うが、これは実態を表していない。公式ドキュメントは「App のインストールは Auto-fix の webhook を有効にするだけで、**セッションレベルのアクセス制御ではない**」と明言している［公式］。App 接続済み・リポジトリ添付済みでも 403 になる構成が実在する［実測］。
+クラウドセッションが必要なのは**タスク実行**だけで、そこで要る GitHub 操作は「Issue を読む」「進捗コメントを書く」の 2 つです。**どちらも組み込みの GitHub MCP ツールで通ります【実証済み】。**
 
-2. **環境のネットワーク設定を緩めても変わらない。** GitHub 通信は network access 設定とは独立した別プロキシを通る［公式］。実際、egress を無制限にしても結果は 1 項目も変わらなかった［実測］。そもそも Trusted のデフォルト許可ドメインに `api.github.com` は最初から入っている。
+タスク仕様（`.claude/epics/<feature>/<N>.md`）はリポジトリにコミットされているので、クラウドセッションは**ただのファイルとして読めます**。GitHub API を介する必要がありません。
 
-3. **同じアカウント・同じリポジトリでも、セッションの起動元が違えば結果が変わる。** チームが使うサーフェスを固定し、そこで測ること。
+### この構成で CCPM から外れる点
+
+正直に書きます。**CCPM のスクリプトは 1 行も変えませんが、クラウド側では `issue-sync` コマンドを使いません。** 進捗コメントはエージェントが MCP ツールで直接投稿します。
+
+これは CCPM の設計思想から大きく外れるものではありません。CCPM が「決定的処理は LLM を通さず bash で」と定めたのは、**10 件の Issue を一括同期するようなループ**を念頭に置いたものです。1 タスクにつき数回のコメント投稿は性質が違い、モデル駆動でも決定性の問題は起きません。
+
+### 前提の確認
+
+**ローカル側で CCPM が動くこと自体は、本調査では未検証です【未実証】。** 上流が想定する環境なので動くはずですが、CCPM 本体には未修正のバグが 2 件あり（§10 参照）、ドキュメント通りには通らない可能性があります。**まずローカルで 1 本通してから**クラウドに広げてください。
 
 ---
 
@@ -43,33 +65,25 @@ gh api repos/{owner}/{repo}
 | OS / アーキテクチャ | Ubuntu 24.04 / x86_64 |
 | CPU / メモリ / ディスク | 4 vCPU / 16 GB / 30 GB |
 | `git` | プリインストール済み。正常に動作する |
-| `gh` CLI | **プリインストールされていない** |
-| `GH_TOKEN` / `GITHUB_TOKEN` | 値は `proxy-injected` というプレースホルダ。プロキシが送信時に実トークンへ差し替える |
+| `gh` CLI | プリインストールされていない |
+| `GH_TOKEN` / `GITHUB_TOKEN` | 値は `proxy-injected` というプレースホルダ |
 
-**`gh` の導入方法。** Cloud environment の setup script に入れる。結果はファイルシステムのスナップショットとしてキャッシュされ、毎セッション走るわけではない。
-
-```bash
-apt-get update && apt-get install -y gh
-```
-
-ただし Ubuntu リポジトリの版は **2.45.0** と古い［実測］。新しい版が要るなら GitHub 公式リポジトリから取得することになり、その場合は `release-assets.githubusercontent.com` への到達が必要になるため、環境の network access を Custom か Full にする。
-
-**スクリプトが `GITHUB_TOKEN` を直読みしていないか確認すること。** 直読みするとプレースホルダ文字列を掴んで失敗する。`gh` 経由なら問題ない［公式］。
+**§1 の構成では、クラウド側に `gh` は要りません。** GitHub 操作は MCP、コード操作は `git` で足ります。`gh` の導入は付録 A に回しました。
 
 ---
 
 ## 3. プロキシの構造 — 4 つのゲート
 
-クラウドセッションの GitHub 通信は、独立した 4 つの関門を通る。**どこで止まっているかを取り違えると、効かない対策に時間を使うことになる。**
+クラウドセッションの GitHub 通信は、独立した 4 つの関門を通ります。**どこで止まっているかを取り違えると、効かない対策に時間を使います。**
 
 | # | ゲート | 制御する主体 | 挙動 |
 | --- | --- | --- | --- |
 | ① | 一般の外向き通信 | 環境の network access 設定 | Trusted / Custom / Full。**GitHub 経路には効かない** |
 | ② | GraphQL | プロキシ固定 | 特定の操作以外はすべて 403。**自前トークンでも回避できない** |
-| ③ | API パス単位の書き込み許可 | プロキシ固定 | `git/refs` への書き込みは拒否。**repo スコープ判定より前に走る** |
+| ③ | API パス単位の書き込み許可 | プロキシ固定 | `git/refs` への書き込みは拒否 |
 | ④ | repo スコープ | セッションの起動サーフェス | 添付済みリポジトリのみ。構成によっては添付済みでも 403 |
 
-**ゲート②について補足する。** 公式ドキュメントは「PR ワークフロー用の pinned set のみを提供する」と説明しているが、**この pinned set に `gh` 自身のクエリは含まれない**［実測］。`gh pr list` ですら `PullRequestList` として名指しで拒否される。実務上は「**`gh` の高レベルサブコマンドは全滅**」と考えてよい。
+**ゲート②が最も重要です。** 公式は「PR ワークフロー用の pinned set のみを提供する」と説明していますが、**この pinned set に `gh` 自身のクエリは含まれません**［実測］。
 
 ```
 gh issue list    → 403  (IssueList)
@@ -80,7 +94,11 @@ gh repo view     → 403
 gh pr list       → 403  (PullRequestList)
 ```
 
-**使えるのは `gh api` + REST パスだけである。** プロキシのエラーメッセージ自身がそう案内している。
+`gh pr list` すら名指しで拒否されます。**実務上は「`gh` の高レベルサブコマンドは全滅」と考えてください。**
+
+そして公式は、この制限が「供給した資格情報にかかわらず適用される」と明記しています［公式］。**つまりゲート②はサーフェスに依存しない可能性が高く、どのクラウド環境でも `gh` の高レベルサブコマンドは使えないと考えるのが安全です。** これが §1 で「クラウドでは `gh` を使わない」構成にした理由です。
+
+**ゲート④だけがサーフェスによって変わります。** ただし本調査では 200 を返す環境を一度も観測していません（付録 A）。
 
 ---
 
@@ -88,218 +106,259 @@ gh pr list       → 403  (PullRequestList)
 
 ### 4.1 git プロトコル — ほぼ制約なし
 
-| 操作 | 可否 | 備考 |
-| --- | --- | --- |
-| clone / fetch / push | **可**［実測］ | |
-| 任意の名前のブランチへ push | **可**［実測］ | `claude/` プレフィックスは不要 |
-| 1 セッションから複数ブランチへ push | **可**［実測］ | worktree の中からでも可 |
-| `.github/workflows/` を含む push | **可**［実測］ | |
-| 保護されていない main への push | **可**［実測］ | force-push（履歴の書き換え）も通る |
-| **保護ブランチへの push** | **不可**［公式］ | 実運用で main を保護しているなら epic-merge の直接 push は通らない |
-| 他者の PR があるブランチへの push | **不可**［公式］ | |
-| 他者のコミットを含むブランチへの push | **不可**［公式］ | |
-| **ブランチの削除** | **不可**［実測］ | 下記 4.3 |
+| 操作 | 可否 |
+| --- | --- |
+| clone / fetch / push | **可**【実証済み】 |
+| 任意の名前のブランチへ push | **可**【実証済み】（`claude/` プレフィックスは不要） |
+| 1 セッションから複数ブランチへ push | **可**【実証済み】（worktree の中からでも） |
+| `.github/workflows/` を含む push | **可**【実証済み】 |
+| 保護されていない main への push | **可**【実証済み】（force-push も通る） |
+| 保護ブランチへの push | **不可**［公式］ |
+| 他者の PR があるブランチ / 他者のコミットを含むブランチ | **不可**［公式］ |
+| **ブランチの削除** | **不可**【実証済み】 |
 
 ### 4.2 GitHub API
 
-| 経路 | 可否 | 備考 |
-| --- | --- | --- |
-| `gh api user` / `rate_limit` | **可**［実測］ | ユーザ・グローバルスコープは通る |
-| `gh api repos/{owner}/{repo}/...` | **サーフェス次第**［実測］ | §1 のテストで判定する |
-| `gh api graphql` | **不可**［公式・実測］ | |
-| `gh` の高レベルサブコマンド | **不可**［実測］ | §3 参照 |
-| 横断列挙（`user/repos` 等） | **不可**［実測］ | `repos/{owner}/{repo}/...` の形に限る |
-| 組み込み GitHub MCP ツール | **可**［実測］ | Issue の読み書き、sub-issue、PR 操作。**ただしモデルからしか呼べない** |
-
-### 4.3 ブランチ削除だけは 3 経路すべてで塞がれている［実測］
-
-| 経路 | 結果 |
+| 経路 | 可否 |
 | --- | --- |
-| `git push origin --delete <branch>` | 403（説明文なし、sideband 切断） |
-| `gh api --method DELETE .../git/refs/heads/<branch>` | `Write access to this GitHub API path is not permitted through this proxy.` |
+| 組み込み GitHub MCP ツール | **可**【実証済み】 — Issue の読み書き、sub-issue、PR。**モデルからしか呼べない** |
+| `gh api user` / `rate_limit` | **可**【実証済み】 |
+| `gh` の高レベルサブコマンド | **不可**【実証済み】 |
+| `gh api graphql` | **不可**［公式・実測］ |
+| 横断列挙（`user/repos` 等） | **不可**【実証済み】 |
+| `gh api repos/{owner}/{repo}/...` | **本調査の環境では 403**。付録 A 参照 |
+
+### 4.3 ブランチ削除だけは 3 経路すべてで塞がれている【実証済み】
+
+| 経路 | 返る理由 |
+| --- | --- |
+| `git push origin --delete` | 403（説明文なし、sideband 切断） |
+| `gh api --method DELETE .../git/refs/heads/x` | `Write access to this GitHub API path is not permitted through this proxy.` |
 | GitHub MCP | ブランチ／ref 削除ツールが存在しない |
 
-**塞がれているのは「ref の削除」であって、破壊的な操作全般ではない。** 履歴を書き換える force-push は通る。REST 側では `git/refs` への DELETE と PATCH の両方が同じ文言で拒否される。
+**塞がれているのは「ref の削除」であって、破壊的な操作全般ではありません。** 履歴を書き換える force-push は通ります。
 
-**回避策:** GitHub UI の Branches 画面、ローカルの clone、または GitHub Actions（ワークフローを push できるため理論上は可能だが**未検証**）。リポジトリ設定の「Automatically delete head branches」を有効にすれば、PR マージ時に自動削除される。
+**回避策:** リポジトリ設定の **「Automatically delete head branches」を有効にする**のが最も運用に馴染みます。PR マージ時に自動で消えます。ほかに GitHub UI の Branches 画面、ローカルの clone。
 
 ---
 
-## 5. CCPM の各部品はどうなるか
+## 5. CCPM の各部品をどこで動かすか
 
-| CCPM の構成要素 | 判定 | 理由と対処 |
+| 構成要素 | 実行場所 | 理由 |
 | --- | --- | --- |
-| **`init.sh`（初期化）** | **要書き換え** | `gh repo view`（GraphQL で落ちる）、`gh label create` / `gh label list`（repo スコープ）、`gh auth login`（対話的でクラウドでは不可能）、`gh extension install` に依存する。**導入の第一歩から動かない** |
-| **報告系スクリプト**<br>`status.sh` `standup.sh` `search.sh` `next.sh` `blocked.sh` ほか | **無改修で動く** | ソースを確認したところ純粋にローカルのファイル操作のみで、GitHub API に一切触れない。`find` / `grep` / `wc` / `sed` だけで構成されている |
-| **`epic-sync`（Issue 同期）** | **要書き換え** | `gh issue create` / `gh issue comment` が GraphQL で落ちる。`gh api` の REST へ全面的に置き換える必要がある |
-| **`gh-sub-issue`（親子 Issue）** | **要書き換え** | GraphQL の `addSubIssue` mutation を使うため不可。REST の `POST /repos/{o}/{r}/issues/{n}/sub_issues` に置換する。無改修の場合、CCPM はタスクリストへ fallback するので**停止はしない**（階層表現が失われるだけ） |
-| **worktree による並列実行** | **git 面は制約なし** | 複数ブランチ push も worktree からの push も通る。ただし CCPM の実際の設計は 1 つの `epic/<name>` ブランチに複数エージェントが同時コミットし、各自 `git pull --rebase` で同期する形であり、**その競合とリベースの安定性は未検証**［未検証］ |
-| **`epic-merge`** | **一部書き換え** | main へのマージ push 自体は通る（**保護していなければ**）。ただし内部で使う `gh issue close` は GraphQL で落ちるため、そこは REST か MCP に置き換える |
-| **epic 完了後のブランチ整理** | **クラウドでは不可** | §4.3 のとおり。外に逃がす |
-| **skill の配布** | **手順の変更が必要** | 公式手順は絶対パスの symlink で、参照先がクラウド VM に存在しない |
+| `init.sh`（初期化） | **ローカル** | `gh repo view`（GraphQL）、`gh label create`、`gh auth login`（対話的）に依存する。クラウドでは動かない |
+| 報告系スクリプト<br>`status.sh` `standup.sh` `search.sh` ほか | **どちらでも** | ソースを確認したところ純粋にローカルのファイル操作のみで、GitHub API に一切触れない。`find` / `grep` / `wc` / `sed` だけで構成されている |
+| `epic-sync`（Issue 同期） | **ローカル** | `gh issue create` / `gh issue comment` が GraphQL で落ちる |
+| `gh-sub-issue`（親子 Issue） | **ローカル** | `addSubIssue` mutation を使う。**無改修でもタスクリストへ fallback するので停止はしない**（階層表現が失われるだけ） |
+| タスク実行（worktree 並列） | **クラウド** | git 面に制約なし【実証済み】。ただし §7 参照 |
+| 進捗コメント | **クラウド（MCP）** | CCPM の `issue-sync` は使わず、エージェントが直接投稿する【実証済み】 |
+| `epic-merge` | **ローカル** | 内部の `gh issue close` が GraphQL で落ちる。main への push 自体はクラウドでも通る |
+| ブランチ整理 | **クラウド外** | 技術的に選択の余地がない |
+| skill の配布 | — | 公式手順は絶対パスの symlink で、参照先がクラウド VM に存在しない |
 
-**skill の配布方法は 2 通りある［公式］。**
+**skill の配布方法は 2 通りあります**［公式］。
 
 1. `skill/ccpm/` の実体をリポジトリの `.claude/skills/ccpm/` に**実ファイルとしてコミットする**。クラウドセッションはクローンされたリポジトリの `.claude/skills/` を読み込む
-2. リポジトリの `.claude/settings.json` にプラグインとして宣言する。セッション開始時に自動インストールされるため、`/plugin` コマンドがクラウドで使えなくても機能する
+2. リポジトリの `.claude/settings.json` に**プラグインとして宣言する**。セッション開始時に自動インストールされる
 
 ---
 
-## 6. sub-issue を REST で張る
+## 6. クラウド側から Issue を扱う
 
-CCPM の階層構造をクラウドで維持したい場合の実装。**GraphQL も `gh` の高レベルサブコマンドも使わない。**
+§1 の構成でクラウドセッションが行う GitHub 操作は 2 つだけです。**どちらも MCP ツールで実証済みです。**
 
-**押さえるべき契約:** URL に入るのは issue **number**、body の `sub_issue_id` に入るのは内部 **id** である。ここを取り違えると 404 になる（よくある間違い）。
+### 読む
 
-```bash
-# 既存 Issue を紐づける場合 — id の解決が要る
-child_id=$(gh api "repos/$REPO/issues/$child" --jq .id)
-gh api --method POST "repos/$REPO/issues/$parent/sub_issues" -F sub_issue_id="$child_id"
+タスク仕様はリポジトリのファイルとして読めるので、GitHub API は原則不要です。Issue 本体やコメントを見たい場合は MCP ツールを使います。
+
+```
+issue_read(get_issue, #N)         → Issue 本体
+issue_read(get_comments, #N)      → コメント履歴
+issue_read(get_sub_issues, #N)    → 子 Issue 一覧
+issue_read(get_parent, #N)        → 親 Issue
 ```
 
-**ただし `epic-sync` は Issue を自分で作る側なので、id 解決は不要にできる。** 作成レスポンスが `id` を返すため、その場で捕まえておけば **タスク 1 本あたり 1 往復節約できる**。
+### 書く
 
-```bash
-read -r num id < <(gh api --method POST "repos/$REPO/issues" \
-  -f title="$title" -f body="$body" --jq '"\(.number) \(.id)"')
+進捗コメントは `add_issue_comment`、完了時のクローズは `issue_write` で行います。
+
+### sub-issue の契約【実証済み】
+
+親子関係を張る操作も MCP で通ります。検証用 Issue 2 本で、`sub_issue_write(add)` → `get_sub_issues` / `get_parent` の**双方向が成立すること**を確認済みです。実行主体は `performed_via_github_app: anthropics/claude` でした。
+
+**押さえるべき契約:** この API は issue **number** ではなく内部 **id** を要求します。
+
+```json
+{"id":"5100355274","url":"https://github.com/OWNER/REPO/issues/2"}
 ```
 
-そのまま流せる実装を [`docs/examples/ccpm-subissue-rest.sh`](./examples/ccpm-subissue-rest.sh) に置いてある。`gh repo view` を避けて `git remote` からリポジトリ名を導出しているのも、GraphQL 制約への対応である。
-
-```bash
-./docs/examples/ccpm-subissue-rest.sh check        # どの層で詰まっているかを切り分ける
-./docs/examples/ccpm-subissue-rest.sh experiment   # 親子 Issue を作って検証
-./docs/examples/ccpm-subissue-rest.sh add 12 34    # #34 を #12 の sub-issue にする
-```
-
-**MCP 経路でも同じことができる［実測］。** 検証用 Issue で `sub_issue_write(add)` → `get_sub_issues` / `get_parent` の双方向を確認済み。ただし MCP ツールはモデルからしか呼べないため、bash スクリプト層の代替にはならない。10 タスクの一括同期のようなループをモデルに任せると、ターンを消費するうえに非決定的になる。
-
-**REST 経路がプロキシ越しに通るかは、§1 のテスト結果次第である。** REST エンドポイント自体は他所で動作実績がある。
+**ただし Issue を自分で作る側は、追加の lookup が要りません。** 作成レスポンスが `id` を返すため、その場で捕まえておけば **1 タスクあたり 1 往復節約できます。** これはローカルの `epic-sync` を書き換える際にも同じく効きます。
 
 ---
 
-## 7. 自動化との組み合わせ
+## 7. 自動化・並列度
 
-### Routines（スケジュール／イベント起動）
+### Routines で Issue イベントは拾えない
 
-**GitHub トリガで反応できるイベントは Pull request と Release だけ**［公式］。`issues.opened` や `issues.labeled` は存在しないため、**「Issue にラベルが付いたら自動着手」は webhook では組めない。**
+**GitHub トリガで反応できるイベントは Pull request と Release だけです**［公式］。`issues.labeled` は存在しないため、**「Issue にラベルが付いたら自動着手」は webhook では組めません。**
 
-代替は API トリガである。routine ごとの `/fire` エンドポイントに POST する形で、Issue イベントを GitHub Actions で受けて中継する。
+代替は API トリガです。routine ごとの `/fire` エンドポイントに GitHub Actions から POST します。
 
-```bash
-curl -X POST https://api.anthropic.com/v1/claude_code/routines/{trigger_id}/fire \
-  -H "Authorization: Bearer {token}" \
-  -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Issue #123 labeled ready"}'
-```
+**注意:** 渡した `text` は `<routine-fire-payload>` で untrusted としてラップされます。**routine の prompt 側で「payload を参照して動け」と明示しない限り、不活性なコンテキストとして無視されます**［公式］。
 
-**`text` の扱いに注意。** 渡した内容は `<routine-fire-payload>` というブロックで untrusted としてラップされる。**routine の prompt 側で「payload を参照して動け」と明示しない限り、不活性なコンテキストとして無視される**［公式］。
-
-**上限が 2 種類ある［公式］。** GitHub webhook イベントには per-routine / per-account の時間あたり上限があり、超過分は破棄される。routine の実行自体にもアカウント日次上限がある。**タスク数だけセッションを起動する設計は、この上限に正面から当たる。**
+**上限が 2 種類あります**［公式］。webhook イベントには per-routine / per-account の時間あたり上限、routine 実行にはアカウント日次上限。**タスク数だけセッションを起動する設計は、この上限に当たります。**
 
 ### 並列度をどう決めるか
 
-CCPM の README が挙げる実例は **1 つの Issue を 5 エージェントで分担する**形である。物理リソース（4 vCPU / 16 GB）で先に詰まることは、同時ビルドを避ける限りあまりない。
+CCPM の README が挙げる実例は **1 つの Issue を 5 エージェントで分担する**形です。物理リソース（4 vCPU / 16 GB）で先に詰まることは、同時ビルドを避ける限りあまりありません。**実際の律速は 2 つです。**
 
-**実際の律速は 2 つある。**
-
-- **レート制限** — クラウドセッションはアカウントの他の利用と枠を共有し、並列実行は比例して消費する［公式］。Opus で大量に回すと使用量上限に到達するという実践報告がある［外部］
+- **レート制限** — クラウドセッションはアカウントの他の利用と枠を共有し、並列実行は比例して消費する［公式］
 - **コンテキストの混線** — 1 セッションで複数タスクを扱うと破綻するという報告が複数ある［外部］
 
-**大きな並列度が本当に必要になったら、詰まるのは VM のスペックではなくアカウントのレート制限である。** その時点で self-hosted 環境かローカルの大きいマシンを検討することになる。
+**なお CCPM の並列モデルは「タスクごとに別ブランチ」ではありません。** 1 つの `epic/<name>` ブランチに複数エージェントが同時にコミットし、各自 `git pull --rebase` で同期する設計です。git の面でプロキシ由来の制約はありませんが、**この競合とリベースの安定性は未検証です【未実証】。**
 
 ---
 
 ## 8. 導入手順
 
-### Phase 0 — 到達性テスト（1 分）
+### Phase 1 — ローカルで 1 本通す
 
-§1 のとおり。**ここの結果で以降の作業量が変わる。**
+**クラウドの話をする前に、ローカルで CCPM が動くことを確認してください。** 本調査ではここも未検証です。
 
-### Phase 1 — リポジトリを整える
+- [ ] CCPM をローカルに導入し、`/pm:init` を通す
+- [ ] 小さな PRD → Epic → `epic-sync` まで実行し、Issue が期待どおり作られるか確認する
+- [ ] **既知のバグ 2 件に当たらないか確認する**（§10）。当たるなら先にパッチを当てる
+
+### Phase 2 — リポジトリをクラウド向けに整える
 
 - [ ] CCPM skill を `.claude/skills/ccpm/` に実ファイルでコミットする、または `.claude/settings.json` にプラグイン宣言する
-- [ ] Cloud environment の setup script に `gh` の導入を入れる（版に注意）
-- [ ] **`init.sh` を書き換える。** `gh repo view` を `git remote` からの導出に、`gh label create` を `gh api --method POST repos/{o}/{r}/labels` に、`gh auth login` を削除する
-- [ ] `epic-sync` の `gh issue create` / `gh issue comment` を `gh api` の REST に置き換える
-- [ ] `gh sub-issue` を REST 実装に置き換える（§6）
-- [ ] `epic-merge` の `gh issue close` を REST か MCP に置き換える
-- [ ] **同期処理の先頭に preflight チェックを入れる。** 通らなければ**何も書き込まずに中断**すること。中途半端な同期は Issue とローカルのタスクファイルの整合を壊す
-- [ ] ブランチ整理の逃がし先を決める（GitHub の「Automatically delete head branches」設定、または Actions）
+- [ ] ブランチ整理の逃がし先を決める（「Automatically delete head branches」を有効にするのが簡単）
 - [ ] main を保護しているなら、`epic-merge` を PR 作成までに留める設計にする
-- [ ] `GITHUB_TOKEN` を直読みしている箇所がないか監査する
 - [ ] **CCPM に乗せる閾値を決める。** 並列可能タスクが 3 本以上ある epic のみ通す、など。小さな修正に PRD は過剰
 
-### Phase 2 — 小さい epic を 1 本、通しで回す
+### Phase 3 — クラウドでタスクを 1 本実行する
 
-並列 2〜3 タスクで PRD → sync → 並列実行 → PR → 統合まで通す。**測るのは速度ではなく、どのフェーズがどちら側で詰まったか。**
+- [ ] `epic-sync` はローカルで実行し、Issue を作る
+- [ ] クラウドセッションを 1 本起動し、`.claude/epics/<feature>/<N>.md` に従って作業させる
+- [ ] 進捗コメントが MCP で投稿できることを確認する
+- [ ] PR まで到達させる
+- [ ] **測るのは速度ではなく、どのフェーズがどちら側で詰まったか**
 
-### Phase 3 — チーム運用に組み込む
+### Phase 4 — 並列に広げる
 
-Auto-fix の標準化と、Issue イベント → Actions → routine の `/fire` という起動経路。**先に日次・時間あたり上限を確認しておく。**
-
----
-
-## 9. どこで実行するか
-
-| CCPM フェーズ | 場所 | 理由 |
-| --- | --- | --- |
-| PRD ブレスト | ローカル | 対話そのものが成果物。plan mode 向き |
-| Epic 作成・タスク分解 | ローカル | 設計判断を含む。曖昧さをここで潰すのが全体の要 |
-| `epic-sync` | サーフェス次第 | §1 のテストが 200 ならクラウド可。403 ならローカル固定 |
-| タスク実行 | **クラウド** | worktree 並列がそのまま使える |
-| 進捗トラッキング | どちらでも | 状態は Issues にあり、スクリプトは純ローカル。安い |
-| CI 追従 | クラウド | Auto-fix |
-| `epic-merge` | クラウド可 | main を保護しているなら PR 作成まで |
-| ブランチ整理 | **クラウド外** | 技術的に選択の余地がない |
-| 統合・重いテスト | ローカル | リソースと到達範囲 |
+- [ ] 並列 2〜3 タスクで epic を 1 本通す
+- [ ] 同一 `epic/<name>` ブランチへの並行コミットが破綻しないか観察する【未実証の領域】
+- [ ] レート制限の消費を計測する
 
 ---
 
-## 10. 導入前に把握しておくリスク
+## 9. リスク
 
 | リスク | 内容と対策 |
 | --- | --- |
-| **サーフェス依存** | 同じアカウント・同じリポジトリでも、起動元が違えば `gh api` の可否が変わる。使うサーフェスを固定し、preflight を必須にする |
-| **ブランチの堆積** | クラウドから削除できないため、epic を回すほど残る。自動削除設定か定期的な棚卸しを用意する |
+| **ローカル環境が必須になる** | §1 の構成は同期をローカルに置く。全員がブラウザだけで完結する運用にはできない。無人運用を目指すなら付録 A の検討が要る |
+| **ブランチの堆積** | クラウドから削除できない。自動削除設定か定期的な棚卸しを用意する |
 | **レート制限** | 並列実行はアカウント枠を比例消費する。使用量の可視化を運用に組み込む |
-| **中途半端な同期** | epic-sync が途中で失敗すると Issue とタスクファイルの整合が壊れる。preflight での早期中断が唯一の防御 |
+| **中途半端な同期** | `epic-sync` が途中で失敗すると Issue とタスクファイルの整合が壊れる。ローカル実行なら失敗しにくいが、失敗時の復旧手順は決めておく |
 | **儀式のコスト** | 小さなタスクに PRD と Epic は過剰。閾値を明文化しないとチームが CCPM を迂回し、仕様と実装が乖離する |
 | **`.claude/` の名前空間衝突** | CCPM が `.claude/prds/`、`.claude/epics/` と独自の skills / commands を占有する。既存の命名と衝突しないか事前確認 |
-| **仕様の陳腐化** | 「全行が仕様に遡れる」は運用が伴って初めて成立する。実装で判断が変わったら仕様ファイルに戻して更新する規律が要る |
-| **移植できない部分** | CCPM 自体は harness 非依存だが、Cloud environment の setup script とネットワーク設定は Anthropic 側に残る |
+| **仕様の陳腐化** | 「全行が仕様に遡れる」は運用が伴って初めて成立する |
 | **CCPM 本体の既知バグ** | `sync.md` が存在しないフラグ `gh issue create --json` を使っている（[#1024](https://github.com/automazeio/ccpm/issues/1024)）、`gh sub-issue` の構文が誤っている（[#1022](https://github.com/automazeio/ccpm/issues/1022)）。**クラウド以前に、ローカルでもドキュメント通りには通らない** |
+| **そもそもの費用対効果** | CCPM がクラウドで固有に足す価値は薄い可能性がある。仕様のトレーサビリティは「計画を `docs/` にコミットして `--cloud` で渡す」でも大半が得られ、並列実行はクラウドセッションが元から提供する。**導入前に、この単純な代替で足りないか一度検討すること** |
 
 ---
 
-## 11. 未確定の事項
+## 10. 未確定の事項
 
-判断に使う前に自分で測るべきもの。
+判断に使う前に、自分で測るべきもの。
 
 | # | 問い | 確かめ方 |
 | --- | --- | --- |
-| 1 | `POST .../sub_issues` はプロキシ経由の REST でも通るか | §1 が 200 のサーフェスで `ccpm-subissue-rest.sh experiment` |
-| 2 | 1 つの epic ブランチに複数エージェントが同時コミットする形は安定するか | 小さい epic を実際に並列で回す |
-| 3 | GitHub Actions 経由ならブランチを削除できるか | `workflow_dispatch` のワークフローを置いて叩く |
-| 4 | 保護ブランチでの挙動 | 保護を有効にした検証用リポジトリで push |
-| 5 | 自前 PAT を `GH_TOKEN` に設定すると repo スコープ 403 を回避できるか | 環境変数に PAT を設定して再テスト。公式記述と外部報告が食い違っている領域 |
+| 1 | **ローカルで CCPM が通しで動くか** | Phase 1。本調査では未検証 |
+| 2 | §1 の構成が通しで機能するか | Phase 3。本調査では未検証 |
+| 3 | 1 つの epic ブランチに複数エージェントが同時コミットする形は安定するか | Phase 4 |
+| 4 | `gh api repos/{owner}/{repo}` が 200 を返す環境は実在するか | 付録 A |
+| 5 | 保護ブランチでの挙動 | 保護を有効にした検証用リポジトリで push |
 
 ---
 
-## 12. まとめ
+## 11. まとめ
 
-**CCPM はクラウドで動く。ただし GitHub に触る部分は全面的に書き換えが要る。**
+**CCPM を書き換えるのではなく、実行場所を分けて解きます。**
 
-| | 状態 |
+| 区分 | 該当するもの |
 | --- | --- |
-| そのまま動く | 報告系スクリプト、worktree による並列実行、`epic-merge` の main push |
-| 書き換えが要る | `init.sh`、`epic-sync` / `issue-sync`、sub-issue 操作、`epic-merge` の Issue クローズ |
-| クラウドでは不可能 | ブランチの削除 |
-| 事前に測る必要がある | `gh api repos/{owner}/{repo}` の可否（サーフェス依存） |
+| **クラウドで動く**【実証済み】 | git 操作全般、MCP による Issue の読み書きと sub-issue、報告系スクリプト |
+| **ローカルに置く** | `init`、`epic-sync`、`gh-sub-issue`、`epic-merge` の Issue クローズ |
+| **クラウドでは不可能**【実証済み】 | ブランチの削除 |
+| **未検証** | CCPM がローカルで通しで動くこと、本構成が通しで機能すること |
 
-書き換えの中身は一貫している。**`gh` の高レベルサブコマンドを `gh api` の REST に置き換える。** これができれば、ローカルとクラウドで同一のコードが動き、CCPM の「決定的な処理は LLM を通さず bash で」という設計思想も保てる。
+この配置なら CCPM のスクリプトは 1 行も変えません。クラウド側で `gh` すら要りません。**代償はローカル環境が必須になることで、完全な無人運用はできません。** それが要件なら付録 A を検討してください。
+
+---
+
+## 付録 A. できたらよいこと — クラウドから GitHub API を叩く
+
+**ここに書くことは、本調査で一度も成功していません。**
+
+`gh api repos/{owner}/{repo}` が **200 を返す環境を、全セッションを通じて一度も観測していません。** 根拠はプロキシのエラーメッセージが `gh api repos/{owner}/{repo}/...` を代替として案内していること、および公式ドキュメントの「repo スコープ: 添付されたリポジトリにのみ届く」という記述からの**推論のみ**です。
+
+それでも、これが成立すれば得られるものは大きいので記録します。
+
+### A.1 何が嬉しいのか
+
+- `epic-sync` をクラウドで実行できる → **ローカル環境なしで運用が閉じる**
+- Routines による無人運用が可能になる
+- ローカルとクラウドで同一のスクリプトが動く
+
+### A.2 まず測る
+
+```bash
+gh api repos/{owner}/{repo}
+```
+
+**200 が返る環境が見つかったら、そこが出発点です。** 403 なら、この付録の内容はすべて不可能です。
+
+このテストは以下では代替できません。いずれも 200 と 403 を区別せず、それぞれに反例があります。
+
+- **GitHub App の接続状態** — 接続済みでも 403 になる。公式も「access control ではない」と明言
+- **リポジトリの添付** — 添付済みでも 403
+- **`git` が動くか** — git は別系統。動いていても API は 403
+- **ネットワーク設定** — 独立した別プロキシ。全開放しても不変
+- **他セッションでの実績** — 起動元が違えば結果が変わる
+
+### A.3 200 が得られた場合にやること【未実証】
+
+CCPM の GitHub 層を `gh api` の REST に書き換えます。**これは上流へのフォークになり、恒久的な保守コストが発生します。** CCPM には GitHub アクセスの抽象層がないため、改変は侵襲的になります。
+
+- `init.sh` — `gh repo view` を `git remote` からの導出に、`gh label create` を `gh api --method POST repos/{o}/{r}/labels` に、`gh auth login` を削除
+- `epic-sync` — `gh issue create` / `gh issue comment` を `gh api` の REST に
+- `gh sub-issue` — REST の `POST /repos/{o}/{r}/issues/{n}/sub_issues` に
+- `epic-merge` — `gh issue close` を REST に
+- **同期処理の先頭に preflight チェックを入れ、通らなければ何も書き込まずに中断する**
+
+sub-issue の REST 実装は [`docs/examples/ccpm-subissue-rest.sh`](./examples/ccpm-subissue-rest.sh) にあります。**このスクリプトは `check` が 403 で落ちる環境でしか試せておらず、`experiment` は実行できていません。** 200 が返る環境が手に入ったら、まずこれを通してください。
+
+```bash
+./docs/examples/ccpm-subissue-rest.sh check        # どの層で詰まっているかを切り分ける
+./docs/examples/ccpm-subissue-rest.sh experiment   # 親子 Issue を作って検証
+```
+
+### A.4 ただし、これでも `gh` の高レベルサブコマンドは戻りません
+
+重要な限界です。ゲート②（GraphQL）は**資格情報にかかわらず適用される**と公式が明記しており、repo スコープとは別の層です。**200 が得られても `gh issue create` は動きません。** 使えるのは `gh api` + REST パスだけで、書き換えは避けられません。
+
+### A.5 クラウドに `gh` を導入する
+
+A.3 に進む場合のみ必要です。setup script に入れると、結果がスナップショットとしてキャッシュされます。
+
+```bash
+apt-get update && apt-get install -y gh
+```
+
+Ubuntu リポジトリの版は **2.45.0** と古いことに注意してください【実証済み】。新しい版が要るなら GitHub 公式リポジトリから取得することになり、`release-assets.githubusercontent.com` への到達が必要なので network access を Custom か Full にします。
+
+**スクリプトが `GITHUB_TOKEN` を直読みしていないか確認してください。** 直読みするとプレースホルダ文字列 `proxy-injected` を掴んで失敗します。`gh` 経由なら問題ありません［公式］。
 
 ---
 
@@ -313,6 +372,6 @@ Auto-fix の標準化と、Issue イベント → Actions → routine の `/fire
 - [Automate work with routines](https://code.claude.com/docs/en/routines) — トリガ、ブランチ push ルール、実行上限
 - [Extend Claude with skills](https://code.claude.com/docs/en/skills) — skill の探索とクラウドでの読み込み
 
-**関連文書:** 検証の経緯・出典の突き合わせ・訂正の記録は [`ccpm-addendum.md`](./ccpm-addendum.md) と [`ccpm-evidence-review.md`](./ccpm-evidence-review.md) にある。本ガイドはそれらの現時点の結論だけを抜き出したものである。
+**関連文書:** 検証の経緯・出典の突き合わせ・訂正の記録は [`ccpm-addendum.md`](./ccpm-addendum.md) と [`ccpm-evidence-review.md`](./ccpm-evidence-review.md) にあります。
 
 **実測環境:** Claude Code cloud セッション（Ubuntu 24.04 / x86_64 / 4 vCPU / 15 GB RAM / 30 GB 空き）。GitHub 到達は MCP サーバ経由に一本化された構成。
