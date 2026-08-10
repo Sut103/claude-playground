@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from taskcli import render, store
 from taskcli.parser import DEFAULT_PRIORITY, Priority, Task, parse_due
 
 __all__ = ["build_parser", "main", "resolve_path", "cmd_add", "cmd_list", "cmd_done", "cmd_rm"]
@@ -192,7 +193,10 @@ def _matches(
     # --tag を複数指定した場合も AND。「両方のタグを持つタスク」が直感に合う。
     if tags and not all(tag in task.tags for tag in tags):
         return False
-    if overdue and not (task.due is not None and task.due < today):
+    # 期限切れの定義は表示層に一本化する（US-4）。完了済みは期限を過ぎていても
+    # 期限切れとして扱わない、という判断が render.due_state 側にあるため、ここで
+    # 独自に task.due < today と書くと --all と併用したときに定義がずれる。
+    if overdue and render.due_state(task, today) != render.OVERDUE:
         return False
     return True
 
@@ -235,52 +239,57 @@ def _find(tasks: Iterable[Task], task_id: int) -> Task | None:
 
 
 # --------------------------------------------------------------------------- #
-# シーム — Issue #9 がここを taskcli.store / taskcli.render の呼び出しに置き換える。
-# シグネチャは契約なので変えない。中身は今の段階では最小限のインメモリ実装である。
+# シーム — Issue #8 が置いた間接層を、Issue #9 で実装へ結線した。
+#
+# シグネチャは #8 のテストが monkeypatch で差し替える契約なので変更していない。
+# 中身だけが taskcli.store / taskcli.render の呼び出しに置き換わっている。
 # --------------------------------------------------------------------------- #
 
 
 def _load(path: Path) -> Any:
-    """ドキュメントを読み込む（→ ``store.load(path)``）。
+    """ドキュメントを読み込む（``store.load``）。
 
-    現段階のドキュメント表現は ``list[Task]`` である。#9 で ``store.Document`` に
-    置き換わるが、シームの外からはこの関数群だけを経由するため影響しない。
+    ファイルが存在しない場合、``store.load`` は空の ``Document`` を返す。
+    ここで例外にしないことが US-1 の「初期化コマンドを別途叩かなくてよい」を支えている。
     """
-    return []
+    return store.load(path)
 
 
 def _save(path: Path, doc: Any) -> None:
-    """ドキュメントを書き戻す（→ ``store.save(path, doc)``）。"""
-    return None
+    """ドキュメントを書き戻す（``store.save``、AD-4 の原子的置換）。"""
+    store.save(path, doc)
 
 
 def _tasks(doc: Any) -> list[Task]:
-    """ドキュメント内のタスクを出現順に返す（→ ``doc.tasks``）。"""
-    return list(doc)
+    """ドキュメント内のタスクを出現順に返す（``Document.tasks``）。
+
+    返るのは ``Document`` が保持しているのと同一の ``Task`` オブジェクトである。
+    ``cmd_done`` はこれを直接書き換えてから ``_save`` するため、その同一性に依存する。
+    """
+    return doc.tasks
 
 
 def _next_id(doc: Any) -> int:
-    """次に割り当てる ID を返す（→ ``store.next_id(doc)``、AD-2）。"""
-    return max((task.id for task in _tasks(doc)), default=0) + 1
+    """次に割り当てる ID を返す（``store.next_id``、AD-2）。"""
+    return store.next_id(doc)
 
 
 def _append(doc: Any, task: Task) -> None:
-    """ドキュメント末尾にタスクを追加する（→ ``doc.append(task)``）。"""
-    doc.append(task)
+    """ドキュメント末尾にタスクを追加する（``Document.add``）。"""
+    doc.add(task)
 
 
 def _remove(doc: Any, task_id: int) -> bool:
-    """ID に一致するタスクを取り除く。取り除けたら ``True``（→ ``doc.remove(id)``）。"""
-    for index, task in enumerate(list(doc)):
-        if isinstance(task, Task) and task.id == task_id:
-            del doc[index]
-            return True
-    return False
+    """ID に一致するタスクを取り除く。取り除けたら ``True``（``Document.remove``）。"""
+    return doc.remove(task_id) is not None
 
 
 def _render(tasks: Sequence[Task]) -> str:
-    """一覧の表示文字列を組み立てる（→ ``render.render_list(tasks)``）。"""
-    return "\n".join(f"#{task.id} {task.text}" for task in tasks)
+    """一覧の表示文字列を組み立てる（``render.render_list``）。
+
+    並び替えは ``render_list`` の内部で ``sort_tasks`` により行われる。
+    """
+    return render.render_list(list(tasks))
 
 
 # --------------------------------------------------------------------------- #

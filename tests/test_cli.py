@@ -1,10 +1,15 @@
 """Issue #8: コマンド層のテスト。
 
-この段階で検証できるのは「引数がどう解釈され、どの終了コードが返るか」である。
-ストア層・表示層はまだ結線されていないため、``cli`` のシーム
-（``_load`` / ``_save`` / ``_render``）を ``monkeypatch`` で差し替え、
-コマンド関数がシームに何を渡し、何を返すかを見る。実ファイルに対する通し確認は
-Issue #9 の E2E テストが受け持つ。
+ここで検証するのは「引数がどう解釈され、どの終了コードが返るか」である。
+``cli`` のシーム（``_load`` / ``_save`` / ``_render``）を ``monkeypatch`` で
+差し替え、コマンド関数がシームに何を渡し、何を返すかを見る。実ファイルに対する
+通し確認は Issue #9 の E2E テストが受け持つ。
+
+**Issue #9 での更新**: 当初このテストは、シームを流れるドキュメントとして
+``list[Task]`` を渡していた。#8 の実装時点で ``store.Document`` がまだ存在せず、
+シームの契約が「関数のシグネチャ」までしか定めていなかったためである。
+結線後は本物の ``Document`` が流れるので、テストの差し替えも ``Document`` に
+揃えた。シームの関数シグネチャ自体は #8 のまま変更していない。
 """
 
 from datetime import date, timedelta
@@ -13,6 +18,7 @@ import pytest
 
 from taskcli import cli
 from taskcli.parser import Priority, Task
+from taskcli.store import Document
 
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
@@ -29,7 +35,7 @@ class Seam:
     """差し替えたシームが受け取った呼び出しの記録。"""
 
     def __init__(self, tasks):
-        self.doc = list(tasks)
+        self.doc = Document(tasks)
         self.loaded = []
         self.saved = []
         self.rendered = []
@@ -140,22 +146,22 @@ class TestAdd:
     def test_priority_is_converted_to_enum(self, seam):
         recorder = seam()
         assert run(["add", "x", "--priority", "high"]) == 0
-        assert recorder.doc[-1].priority is Priority.HIGH
+        assert recorder.doc.tasks[-1].priority is Priority.HIGH
 
     def test_tag_appends(self, seam):
         recorder = seam()
         assert run(["add", "x", "--tag", "docs", "--tag", "refactor"]) == 0
-        assert recorder.doc[-1].tags == ["docs", "refactor"]
+        assert recorder.doc.tasks[-1].tags == ["docs", "refactor"]
 
     def test_tag_defaults_to_empty_list_not_none(self, seam):
         recorder = seam()
         run(["add", "x"])
-        assert recorder.doc[-1].tags == []
+        assert recorder.doc.tasks[-1].tags == []
 
     def test_due_is_parsed_into_date(self, seam):
         recorder = seam()
         run(["add", "x", "--due", "2026-08-20"])
-        assert recorder.doc[-1].due == date(2026, 8, 20)
+        assert recorder.doc.tasks[-1].due == date(2026, 8, 20)
 
     @pytest.mark.parametrize("bad", ["2026-13-45", "tomorrow", "2026/08/20", "26-08-20", "2026-02-30"])
     def test_invalid_due_is_rejected_before_any_write(self, bad, seam, capsys):
@@ -172,7 +178,7 @@ class TestAdd:
         recorder = seam([task(1), task(4)])
         assert run(["add", "新しいこと"]) == 0
         assert "5" in capsys.readouterr().out
-        assert recorder.doc[-1].id == 5
+        assert recorder.doc.tasks[-1].id == 5
 
     def test_saves_to_resolved_path(self, seam, tmp_path):
         recorder = seam()
@@ -182,7 +188,7 @@ class TestAdd:
     def test_new_task_is_not_done(self, seam):
         recorder = seam()
         run(["add", "x"])
-        assert recorder.doc[-1].done is False
+        assert recorder.doc.tasks[-1].done is False
 
 
 # --------------------------------------------------------------------------- #
@@ -265,7 +271,7 @@ class TestDone:
     def test_marks_task_done_and_saves(self, seam):
         recorder = seam([task(1), task(2)])
         assert run(["done", "2"]) == 0
-        assert recorder.doc[1].done is True
+        assert recorder.doc.tasks[1].done is True
         assert len(recorder.saved) == 1
 
     def test_does_not_remove_the_task(self, seam):
