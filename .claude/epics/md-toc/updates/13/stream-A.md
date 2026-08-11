@@ -37,8 +37,10 @@ Files: md_toc/splice.py, tests/test_splice.py
 ## Verification
 - `python3 -m unittest tests.test_splice -v` -> Ran 37 tests, OK.
 - `python3 -m unittest discover` -> Ran 194 tests, OK. `tests/test_cli.py` from the
-  concurrent #15 stream had not landed at the time of this run, so nothing failed
-  there; `md_toc/cli.py` and `md_toc/__main__.py` were present but untouched by me.
+  concurrent #15 stream had not landed at the time of that run.
+- Re-ran after #15's tests appeared: `python3 -m unittest discover` -> Ran 234 tests,
+  OK. The CLI stream is green against this module's contract; `md_toc/cli.py`,
+  `md_toc/__main__.py` and `tests/test_cli.py` were left untouched and unstaged by me.
 
 ## Status
 All acceptance criteria in 13.md met. Standard library only, no filesystem access.
