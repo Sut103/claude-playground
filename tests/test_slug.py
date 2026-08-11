@@ -30,11 +30,15 @@ class TestWhitespace(unittest.TestCase):
     def test_single_space_becomes_hyphen(self):
         self.assertEqual(slugify("hello world", {}), "hello-world")
 
-    def test_runs_of_spaces_collapse_to_one_hyphen(self):
-        self.assertEqual(slugify("hello     world", {}), "hello-world")
+    def test_runs_of_spaces_are_not_collapsed(self):
+        # GitHub emits one hyphen per whitespace character, not one per run.
+        self.assertEqual(slugify("hello     world", {}), "hello-----world")
+
+    def test_two_spaces_become_two_hyphens(self):
+        self.assertEqual(slugify("A  B", {}), "a--b")
 
     def test_tabs_and_newlines_are_whitespace_too(self):
-        self.assertEqual(slugify("hello\t\tbig\nworld", {}), "hello-big-world")
+        self.assertEqual(slugify("hello\t\tbig\nworld", {}), "hello--big-world")
 
     def test_leading_and_trailing_whitespace_is_dropped(self):
         self.assertEqual(slugify("   Getting Started   ", {}), "getting-started")
@@ -50,6 +54,14 @@ class TestPunctuation(unittest.TestCase):
     def test_punctuation_is_stripped_not_replaced(self):
         # The comma vanishes; only the space becomes a hyphen.
         self.assertEqual(slugify("Hello, World", {}), "hello-world")
+
+    def test_cpp_and_csharp_heading_matches_github(self):
+        # "++", "/" and "#" are removed before spaces are converted, leaving
+        # two spaces — GitHub turns each into its own hyphen.
+        self.assertEqual(slugify("C++ / C#", {}), "c--c")
+
+    def test_punctuation_between_spaces_leaves_both_hyphens(self):
+        self.assertEqual(slugify("Read & Write", {}), "read--write")
 
     def test_existing_hyphens_are_preserved(self):
         self.assertEqual(slugify("Well-Known URIs", {}), "well-known-uris")
@@ -90,10 +102,11 @@ class TestUnicode(unittest.TestCase):
         self.assertEqual(slugify("Привет Мир", {}), "привет-мир")
 
     def test_unicode_punctuation_is_stripped(self):
-        self.assertEqual(slugify("“Smart” quotes — dash", {}), "smart-quotes-dash")
+        # The em dash vanishes, leaving the two spaces that flanked it.
+        self.assertEqual(slugify("“Smart” quotes — dash", {}), "smart-quotes--dash")
 
     def test_emoji_is_stripped(self):
-        self.assertEqual(slugify("Release 🎉 Notes", {}), "release-notes")
+        self.assertEqual(slugify("Release 🎉 Notes", {}), "release--notes")
 
 
 class TestDuplicates(unittest.TestCase):
@@ -135,7 +148,7 @@ class TestDuplicates(unittest.TestCase):
         seen = {}
         self.assertEqual(slugify("What's New?", seen), "whats-new")
         self.assertEqual(slugify("Whats New", seen), "whats-new-1")
-        self.assertEqual(slugify("WHATS   NEW!!!", seen), "whats-new-2")
+        self.assertEqual(slugify("WHATS NEW!!!", seen), "whats-new-2")
 
     def test_empty_slugs_are_disambiguated_too(self):
         seen = {}

@@ -20,16 +20,20 @@ __all__ = ["slugify"]
 #: rather than replaced, so "What's New?" becomes "whats-new".
 _STRIP_RE = re.compile(r"[^\w\s-]")
 
-#: Runs of whitespace collapse to a single hyphen.
-_WHITESPACE_RE = re.compile(r"\s+")
+#: Each whitespace character becomes its own hyphen — runs are *not* collapsed,
+#: matching GitHub. Punctuation is stripped before this runs, so "C++ / C#"
+#: leaves two spaces and yields "c--c".
+_WHITESPACE_RE = re.compile(r"\s")
 
 
 def slugify(title: str, seen: dict) -> str:
     """Return the GitHub anchor slug for `title`, disambiguated via `seen`.
 
-    Lowercases the title, strips punctuation, and turns whitespace runs into
-    single hyphens. The first occurrence of a base slug is returned unchanged;
-    the second gets `-1`, the third `-2`, and so on.
+    Lowercases the title, strips punctuation, and turns each remaining
+    whitespace character into one hyphen — runs are not collapsed, which is
+    what GitHub does. Leading and trailing whitespace is dropped first, so no
+    slug begins or ends with a stray hyphen. The first occurrence of a base
+    slug is returned unchanged; the second gets `-1`, the third `-2`, and so on.
 
     `seen` maps base slug to occurrence count and is mutated in place. Pass a
     fresh empty dict per document so numbering never leaks between documents.
