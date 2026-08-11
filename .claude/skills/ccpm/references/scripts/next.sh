@@ -1,4 +1,6 @@
 #!/bin/bash
+. "$(dirname "$0")/lib/deps.sh"
+
 echo "Getting status..."
 echo ""
 echo ""
@@ -23,17 +25,10 @@ for epic_dir in .claude/epics/*/; do
       continue
     fi
 
-    # Check dependencies
-    deps_line=$(grep "^depends_on:" "$task_file" | head -1)
-    if [ -n "$deps_line" ]; then
-      deps=$(echo "$deps_line" | sed 's/^depends_on: *//' | sed 's/^\[//' | sed 's/\]$//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-      [ -z "$deps" ] && deps=""
-    else
-      deps=""
-    fi
+    # Available when every declared dependency has closed
+    unmet=$(ccpm_unmet_deps "$task_file")
 
-    # If no dependencies or empty, task is available
-    if [ -z "$deps" ] || [ "$deps" = "depends_on:" ]; then
+    if [ -z "$unmet" ]; then
       task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
       task_num=$(basename "$task_file" .md)
       parallel=$(grep "^parallel:" "$task_file" | head -1 | sed 's/^parallel: *//')

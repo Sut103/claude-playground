@@ -41,7 +41,29 @@ if [ -d ".claude/epics" ]; then
 
       echo ""
       ((found++))
+      seen_updates="$seen_updates $epic_name/$issue_num"
     fi
+  done
+
+  # An updates/ directory only exists once the Execute phase has launched agents.
+  # A task whose own status is in-progress is active work too, so report it here
+  # rather than leaving it invisible in every tracking view.
+  for task_file in .claude/epics/*/[0-9]*.md; do
+    [ -f "$task_file" ] || continue
+
+    task_status=$(grep "^status:" "$task_file" | head -1 | sed 's/^status: *//')
+    [ "$task_status" = "in-progress" ] || continue
+
+    task_num=$(basename "$task_file" .md)
+    epic_name=$(basename "$(dirname "$task_file")")
+    case " $seen_updates " in *" $epic_name/$task_num "*) continue ;; esac
+
+    task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
+    echo "📝 Task #$task_num - $task_name"
+    echo "   Epic: $epic_name"
+    echo "   Progress: no updates/ directory yet"
+    echo ""
+    ((found++))
   done
 fi
 

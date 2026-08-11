@@ -1,4 +1,6 @@
 #!/bin/bash
+. "$(dirname "$0")/lib/deps.sh"
+
 echo "Getting tasks..."
 echo ""
 echo ""
@@ -22,34 +24,23 @@ for epic_dir in .claude/epics/*/; do
       continue
     fi
 
-    # Check for dependencies
-    deps_line=$(grep "^depends_on:" "$task_file" | head -1)
-    if [ -n "$deps_line" ]; then
-      deps=$(echo "$deps_line" | sed 's/^depends_on: *//' | sed 's/^\[//' | sed 's/\]$//' | sed 's/,/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-      [ -z "$deps" ] && deps=""
-    else
-      deps=""
-    fi
+    # Blocked only while a declared dependency has not closed yet
+    unmet=$(ccpm_unmet_deps "$task_file")
 
-    if [ -n "$deps" ] && [ "$deps" != "depends_on:" ]; then
+    if [ -n "$unmet" ]; then
       task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
       task_num=$(basename "$task_file" .md)
+      declared=$(ccpm_declared_deps "$task_file")
 
       echo "⏸️ Task #$task_num - $task_name"
       echo "   Epic: $epic_name"
-      echo "   Blocked by: [$deps]"
+      echo "   Blocked by: [$declared]"
 
-      # Check status of dependencies
-      open_deps=""
-      for dep in $deps; do
-        dep_file="$epic_dir$dep.md"
-        if [ -f "$dep_file" ]; then
-          dep_status=$(grep "^status:" "$dep_file" | head -1 | sed 's/^status: *//')
-          [ "$dep_status" = "open" ] && open_deps="$open_deps #$dep"
-        fi
+      waiting=""
+      for dep in $unmet; do
+        waiting="$waiting #$dep"
       done
-
-      [ -n "$open_deps" ] && echo "   Waiting for:$open_deps"
+      echo "   Waiting for:$waiting"
       echo ""
       ((found++))
     fi

@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/lib/deps.sh"
 
 echo "Getting status..."
 echo ""
@@ -44,6 +45,7 @@ else
   # Count tasks
   total=0
   open=0
+  in_progress=0
   closed=0
   blocked=0
 
@@ -53,11 +55,14 @@ else
     ((total++))
 
     task_status=$(grep "^status:" "$task_file" | head -1 | sed 's/^status: *//')
-    deps=$(grep "^depends_on:" "$task_file" | head -1 | sed 's/^depends_on: *\[//' | sed 's/\]//')
 
     if [ "$task_status" = "closed" ] || [ "$task_status" = "completed" ]; then
       ((closed++))
-    elif [ -n "$deps" ] && [ "$deps" != "depends_on:" ]; then
+    elif [ "$task_status" = "in-progress" ]; then
+      # Already started, so not available to pick up — count it separately or
+      # this number stops agreeing with next.sh, which skips in-progress tasks.
+      ((in_progress++))
+    elif [ -n "$(ccpm_unmet_deps "$task_file")" ]; then
       ((blocked++))
     else
       ((open++))
@@ -82,6 +87,7 @@ else
   echo "📊 Breakdown:"
   echo "  Total tasks: $total"
   echo "  ✅ Completed: $closed"
+  echo "  🚧 In Progress: $in_progress"
   echo "  🔄 Available: $open"
   echo "  ⏸️ Blocked: $blocked"
 

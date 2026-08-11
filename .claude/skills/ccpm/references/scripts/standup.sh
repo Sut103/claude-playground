@@ -1,4 +1,5 @@
 #!/bin/bash
+. "$(dirname "$0")/lib/deps.sh"
 
 echo "📅 Daily Standup - $(date '+%Y-%m-%d')"
 echo "================================"
@@ -59,14 +60,7 @@ for epic_dir in .claude/epics/*/; do
       continue
     fi
 
-    deps_line=$(grep "^depends_on:" "$task_file" | head -1)
-    if [ -n "$deps_line" ]; then
-      deps=$(echo "$deps_line" | sed 's/^depends_on: *//' | sed 's/^\[//' | sed 's/\]$//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
-      [ -z "$deps" ] && deps=""
-    else
-      deps=""
-    fi
-    if [ -z "$deps" ] || [ "$deps" = "depends_on:" ]; then
+    if [ -z "$(ccpm_unmet_deps "$task_file")" ]; then
       task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
       task_num=$(basename "$task_file" .md)
       echo "  • #$task_num - $task_name"
