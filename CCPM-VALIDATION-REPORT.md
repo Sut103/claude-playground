@@ -176,11 +176,30 @@ GitHub 上の親子関係は成立していない (`has_parent: false`)。
 | F | エラーハンドリング不備 (未修正) | init 実行時。403 は環境由来、握り潰しは CCPM 側 |
 | G | 設計課題 (未修正) | アーカイブ後の追跡系で顕在化 |
 
-## 環境制約
+## 環境制約 (訂正済み)
 
-`gh` CLI は本セッションから GitHub API に到達できない (GraphQL / REST とも 403)。
-GitHub 自体は到達可能で、MCP 経由なら `Sut103` として認証される。プロキシが
-GitHub アクセスを MCP ツール面に限定し、シェルからの `gh` を遮断しているため。
-CCPM は GitHub 操作を全面的に `gh` へハードコードしており、この前提が衝突する。
+> **訂正 (2026-08-11 追記)**
+> 当初「`gh` は GraphQL / REST とも 403 で GitHub API に到達できない」と結論したが、
+> **これは誤り**。網羅検証の結果、**REST (`gh api`) は全面的に利用可能**だった。
+> 詳細は `GH-CAPABILITY-MATRIX.md`。
 
-本検証では許諾のもと Sync と Execute で各 1 回ずつ MCP へ振り替えた。
+遮断されているのは **GraphQL のみ**:
+
+```
+HTTP 403: This GraphQL query is not enabled for this session —
+only the pinned set of PR-review operations is served.
+Use REST via `gh api repos/{owner}/{repo}/...` instead.
+```
+
+CCPM は GitHub 操作を**すべて porcelain** (`gh issue create` / `view` / `edit` /
+`comment` / `close`) で書いており、これらは例外なく GraphQL を叩くため落ちた。
+一方 `gh api` 経由の REST は読み書きとも動作し、`gh-sub-issue` 拡張が必要だった
+サブイシュー連結すらネイティブ REST API で可能である。
+
+したがって **代替不能な操作はひとつも無く、MCP 迂回は必須ではなかった**。
+CCPM の GitHub 呼び出しを porcelain から `gh api` へ書き換えれば、本環境でも
+MCP を使わずに完走できた。これは upstream への 3 つ目の提案になりうる
+(GraphQL 非対応環境でも動くよう REST を使う)。
+
+本検証では許諾のもと Sync と Execute で各 1 回ずつ MCP へ振り替えたが、
+これは当時の誤った状況認識に基づく選択だった。
