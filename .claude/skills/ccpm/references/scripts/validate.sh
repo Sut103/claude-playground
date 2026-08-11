@@ -69,7 +69,15 @@ echo ""
 echo "📝 Frontmatter Validation:"
 invalid=0
 
-for file in $(find .claude -name "*.md" -path "*/epics/*" -o -path "*/prds/*" 2>/dev/null); do
+for file in $(find .claude \( -path "*/epics/*" -o -path "*/prds/*" \) -name "*.md" 2>/dev/null); do
+  # Bookkeeping files CCPM itself writes without frontmatter (sync.md Step 6,
+  # conventions.md directory structure) are not schema-bearing documents.
+  case "$(basename "$file")" in
+    github-mapping.md|execution-status.md) continue ;;
+  esac
+  case "$file" in
+    */updates/*) continue ;;
+  esac
   if ! grep -q "^---" "$file"; then
     echo "  ⚠️ Missing frontmatter: $(basename "$file")"
     ((invalid++))
