@@ -32,16 +32,34 @@ REPO=$(echo "$remote_url" | sed 's|.*github.com[:/]||' | sed 's|\.git$||')
 
 **Step 1 — Create epic issue:**
 
-Strip frontmatter from epic.md, then:
+Strip frontmatter from epic.md (see `conventions.md` — the awk form, not a
+doubled `sed`, which silently empties the body), then create the issue over the
+REST API so the response carries the new issue number:
+
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' .claude/epics/<name>/epic.md > /tmp/epic-body.md
-epic_number=$(gh issue create \
-  --repo "$REPO" \
-  --title "Epic: <name>" \
-  --body-file /tmp/epic-body.md \
-  --label "epic,epic:<name>,feature" \
-  --json number -q .number)
+strip_frontmatter() {
+  awk 'NR==1 && $0=="---" {infm=1; next} infm && $0=="---" {infm=0; next} !infm' "$1"
+}
+
+strip_frontmatter .claude/epics/<name>/epic.md > /tmp/epic-body.md
+
+jq -n --arg t "Epic: <name>" --rawfile b /tmp/epic-body.md \
+  '{title: $t, body: $b, labels: ["epic", "epic:<name>", "feature"]}' > /tmp/epic-payload.json
+
+epic_number=$(gh api -X POST "repos/$REPO/issues" \
+  --input /tmp/epic-payload.json --jq '.number')
 ```
+
+**Verify the body landed** — an empty body is the failure this step is most
+prone to, and GitHub accepts it without complaint:
+```bash
+[ -s /tmp/epic-body.md ] || { echo "❌ Epic body is empty — check frontmatter stripping"; exit 1; }
+```
+
+Do **not** use `gh issue create --json number -q .number`: `gh issue create` has
+no `--json` flag (it fails with `unknown flag: --json`), and it talks to the
+GraphQL API, which is unavailable in some environments. `gh api` is REST and
+returns the created issue as JSON.
 
 **Step 2 — Create task sub-issues:**
 
@@ -57,25 +75,93 @@ For ≥5 tasks: use parallel Task agents (3-4 tasks per batch).
 
 Per task:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <task_file> > /tmp/task-body.md
-task_number=$(gh issue create \
-  --repo "$REPO" \
-  --title "<task_name>" \
-  --body-file /tmp/task-body.md \
-  --label "task,epic:<name>" \
-  --json number -q .number)
-# or with sub-issues:
-# gh sub-issue create --parent $epic_number ...
+strip_frontmatter <task_file> > /tmp/task-body.md
+[ -s /tmp/task-body.md ] || { echo "❌ Task body is empty"; exit 1; }
+
+jq -n --arg t "<task_name>" --rawfile b /tmp/task-body.md \
+  '{title: $t, body: $b, labels: ["task", "epic:<name>"]}' > /tmp/task-payload.json
+
+task_number=$(gh api -X POST "repos/$REPO/issues" \
+  --input /tmp/task-payload.json --jq '.number')
 ```
+
+**Linking tasks to the epic.** If `gh-sub-issue` is installed, use it:
+```bash
+gh sub-issue add --parent "$epic_number" --child "$task_number"
+```
+
+Otherwise link over REST — GitHub's sub-issues API accepts the child's internal
+`id` (not its issue number):
+```bash
+child_id=$(gh api "repos/$REPO/issues/$task_number" --jq '.id')
+gh api -X POST "repos/$REPO/issues/$epic_number/sub_issues" -F sub_issue_id="$child_id"
+```
+
+If neither works, fall back to a task list in the epic body (`- [ ] #<N>` lines),
+which is what the "Closing an Issue" step below ticks off.
 
 **Step 3 — Rename task files and update references:**
 
-After all issues are created, rename `001.md` → `<issue_number>.md` and update all `depends_on`/`conflicts_with` arrays to use real issue numbers (not sequential numbers).
+After all issues are created, rename `001.md` → `<issue_number>.md` and update the
+`depends_on` / `conflicts_with` arrays to use real issue numbers.
+
+**Rewrite only those two frontmatter lines — never the whole file.** A global
+`sed "s/\b001\b/40/g"` corrupts prose, because `\b` treats a comma as a word
+boundary: `2,001 segments` becomes `2,40 segments`, and `10,001 matches` becomes
+`10,40 matches`. Any thousands-separated number ending in a task number is
+silently rewritten.
 
 ```bash
-# Build old→new mapping, then for each task file:
-sed -i.bak "s/\b001\b/<new_num_1>/g" <file>  # repeat for each mapping
-mv 001.md <new_num>.md
+# mapping.tsv holds one "<seq>\t<issue_number>" row per task, in creation order.
+remap_field() {   # remap_field <file> <field>
+  file="$1"; field="$2"
+  line=$(grep "^$field:" "$file" | head -1) || return 0
+  [ -z "$line" ] && return 0
+  values=$(printf '%s' "$line" | sed "s/^$field: *\[//" | sed 's/\]$//')
+  [ -z "$values" ] && return 0
+
+  out=""
+  for v in $(printf '%s' "$values" | tr ',' ' '); do
+    new=$(awk -F'\t' -v s="$v" '$1==s {print $2}' mapping.tsv)
+    [ -z "$new" ] && new="$v"        # leave anything unmapped untouched
+    out="$out, $new"
+  done
+  sed -i.bak "/^$field:/c\\$field: [${out#, }]" "$file" && rm "$file.bak"
+}
+
+while IFS=$'\t' read -r seq issue _; do
+  remap_field "$seq.md" depends_on
+  remap_field "$seq.md" conflicts_with
+done < mapping.tsv
+
+# Rename only after every file has been remapped, so the sequential names in
+# mapping.tsv still resolve while remapping is in progress.
+while IFS=$'\t' read -r seq issue _; do
+  mv "$seq.md" "$issue.md"
+done < mapping.tsv
+```
+
+Task bodies that mention `001`-style numbers in prose keep them — those bodies
+are already on GitHub as issue text, and `github-mapping.md` (Step 6) is what
+resolves a sequential number to its issue number.
+
+**Step 3b — Rewrite the epic's task checklist to issue numbers:**
+
+`structure.md` writes the checklist as `- [ ] 001.md - <title> (parallel: …)`, but
+"Closing an Issue" below ticks items off by matching `- [ ] #<N>`. Convert the
+list during sync, in `epic.md` and in the epic issue body, or nothing will ever
+get ticked:
+
+```bash
+while IFS=$'\t' read -r seq issue title; do
+  sed -i.bak "s|^- \[ \] $seq\.md - |- [ ] #$issue - |" .claude/epics/<name>/epic.md
+done < mapping.tsv
+rm -f .claude/epics/<name>/epic.md.bak
+
+# Push the same body to the epic issue so local and GitHub agree
+strip_frontmatter .claude/epics/<name>/epic.md > /tmp/epic-body.md
+jq -n --rawfile b /tmp/epic-body.md '{body: $b}' > /tmp/epic-patch.json
+gh api -X PATCH "repos/$REPO/issues/$epic_number" --input /tmp/epic-patch.json --jq '.number'
 ```
 
 **Step 4 — Update frontmatter:**

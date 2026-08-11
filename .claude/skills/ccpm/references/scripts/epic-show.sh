@@ -63,8 +63,12 @@ for task_file in "$epic_dir"/[0-9]*.md; do
     echo "  ✅ #$task_num - $task_name"
     ((closed_count++))
   else
-    echo "  ⬜ #$task_num - $task_name"
-    [ "$parallel" = "true" ] && echo -n " (parallel)"
+    # Build the marker into the line. Emitting it after the echo above put it at
+    # the start of the *next* task's line, so every marker read as belonging to
+    # the wrong task.
+    suffix=""
+    [ "$parallel" = "true" ] && suffix=" (parallel)"
+    echo "  ⬜ #$task_num - $task_name$suffix"
     ((open_count++))
   fi
 

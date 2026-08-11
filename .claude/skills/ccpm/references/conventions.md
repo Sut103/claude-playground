@@ -99,8 +99,15 @@ rm <file>.bak
 
 When stripping frontmatter to get body content for GitHub:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <file> > /tmp/body.md
+awk 'NR==1 && $0=="---" {infm=1; next} infm && $0=="---" {infm=0; next} !infm' <file> > /tmp/body.md
 ```
+
+Do **not** use `sed '1,/^---$/d; 1,/^---$/d'`. One `1,/^---$/d` already removes
+the whole frontmatter block — line 1 opens the range and the closing `---` ends
+it. The second copy then deletes from the body's first line up to the next
+`^---$`, and a body with no `---` line of its own leaves the range open to end
+of file, so the entire body is discarded. That produces an empty GitHub issue
+with no error.
 
 ---
 
