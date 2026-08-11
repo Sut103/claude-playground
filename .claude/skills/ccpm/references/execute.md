@@ -4,6 +4,26 @@ This phase covers analyzing GitHub issues for parallel work streams and launchin
 
 ---
 
+## Which Working Copy Holds Epic State
+
+Once the epic worktree exists, **the worktree is the single source of truth for
+`.claude/epics/<name>/`** — analysis files, `updates/`, task frontmatter, and
+`execution-status.md` all live and are committed there, alongside the code they
+describe. They return to the main branch when the epic merges.
+
+This matters because the main repository and the worktree are two separate
+checkouts. Writing an analysis file in the main repo leaves it invisible to
+agents running in the worktree, and agent progress writes land in the worktree
+where the main repo will not see them — producing two divergent copies of the
+same tracking file. Every relative path below (`.claude/epics/<epic>/...`)
+resolves inside the worktree.
+
+Create the analysis and progress files in the worktree before launching agents,
+and give agents absolute paths so there is no ambiguity about which checkout
+they are reading.
+
+---
+
 ## Issue Analysis
 
 **Trigger**: User wants to understand how to parallelize work on an issue before starting.
