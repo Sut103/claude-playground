@@ -87,8 +87,14 @@ repos/... (403)        → Content-Type のみ。GitHub 由来ヘッダが一切
 ```
 
 **`repos/**` へのリクエストは GitHub に到達していない。** proxy が手前で落としている。
-エラー文の "An org admin must connect the Claude GitHub App" は**ミスリード**で、
-実際には App は接続済み（§2 参照）。実体は proxy のパス制限。
+
+> **追記（続報調査で判明）**: 当初このエラー文 "An org admin must connect the Claude GitHub App" を
+> 「App は接続済みなのでミスリード」と評価したが、これは**誤りだった**。
+> §2 で確認した installation token は `allows_permissionless_access=true` の
+> `/user` を通すだけのもので、リポジトリ権限の存在を意味しない。
+> `repos/**` REST は **Claude GitHub App の接続を前提としたゲート**であり、
+> **解除可能な可能性が高い**。詳細と根拠は
+> [`gh-proxy-investigation.md`](./gh-proxy-investigation.md) を参照。
 
 なお owner の大文字小文字（`Sut103` / `sut103`）は無関係、両方 403。
 `add_repo` を `access: "push"` で呼んでも `already_present` で状況は変わらなかった。
@@ -178,6 +184,12 @@ CCPM は Issue を単一の情報源として扱い、`gh issue create/edit/list
 これは session の egress policy 側の設定であり、コンテナ内の操作では回避できない
 （README も「403/407 は回避せず報告せよ」と明示）。解消するには環境の
 GitHub API 許可範囲を広げる必要がある。
+
+拒否の主体・設計背景・解除可能性の詳細な調査は
+**[`gh-proxy-investigation.md`](./gh-proxy-investigation.md)** に分離した。
+要点: 拒否しているのは Anthropic の Egress Gateway（VM 外の透過 MITM）で、
+REST 側（`repos/**`）は Claude GitHub App の接続で解除できる見込みがある一方、
+**GraphQL 制限は仕様として解除不可**。
 
 ## 再現用スニペット
 
