@@ -11,6 +11,7 @@ modes; those compare against what the core actually emits, so the tests pin the
 CLI's wiring rather than restating the renderer's format.
 """
 
+import codecs
 import contextlib
 import io
 import subprocess
@@ -47,6 +48,17 @@ DOC_WITHOUT_MARKERS = """# Title
 
 ### Beta
 """
+
+
+def outside_markers(data):
+    """Return the bytes of `data` before the opening marker and after the closing one.
+
+    The splicer owns everything between the markers; the CLI owns the encoding
+    of everything else, so that is what the byte-level tests compare.
+    """
+    prefix, _, rest = data.partition(TOC_START.encode("utf-8"))
+    _, _, suffix = rest.partition(TOC_END.encode("utf-8"))
+    return prefix, suffix
 
 
 class CLITestCase(unittest.TestCase):
@@ -321,6 +333,134 @@ class TestMissingMarkers(CLITestCase):
         code, _, _ = self.run_cli(str(path), "--in-place")
         self.assertEqual(code, EXIT_ERROR)
         self.assertEqual(path.read_bytes(), before)
+
+
+class TestEncodingAndLineEndings(CLITestCase):
+    """Issues #20 and #21: the file's bytes must survive the round trip.
+
+    The CLI is the only module that decodes and encodes, so it is the only
+    place a line ending can be normalized or a byte-order mark can be eaten.
+    Every assertion here is on bytes, not text, because `read_text` would
+    normalize away the very corruption under test.
+    """
+
+    def fresh(self, text=DOC, name="doc.md", newline="\n", bom=False):
+        """Write `text` with the given line ending and BOM, TOC already current.
+
+        The file is returned at the tool's own fixed point — one `--in-place`
+        run has already happened — so a further run must be a byte-level no-op.
+        Any byte that moves after that is the encoding layer corrupting the
+        document rather than the splicer doing its job.
+        """
+        path = self.dir / name
+        data = text.replace("\n", newline).encode("utf-8")
+        path.write_bytes(codecs.BOM_UTF8 + data if bom else data)
+        self.run_cli(str(path), "--in-place")
+        return path
+
+    def test_crlf_document_keeps_its_line_endings_outside_the_markers(self):
+        path = self.fresh(newline="\r\n")
+        before = path.read_bytes()
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+
+        after = path.read_bytes()
+        self.assertEqual(outside_markers(after), outside_markers(before))
+        self.assertIn(b"\r\n", outside_markers(after)[0])
+
+    def test_crlf_document_is_not_normalized_to_lf(self):
+        path = self.fresh(newline="\r\n")
+        self.run_cli(str(path), "--in-place")
+        prefix = outside_markers(path.read_bytes())[0]
+        self.assertNotIn(b"\n", prefix.replace(b"\r\n", b""))
+
+    def test_lf_document_is_byte_identical_when_its_toc_is_current(self):
+        path = self.fresh()
+        before = path.read_bytes()
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+
+        self.assertEqual(path.read_bytes(), before)
+        self.assertNotIn(b"\r", before)
+
+    def test_crlf_document_is_idempotent_after_the_first_run(self):
+        """Check mode agrees with what in-place produced, CRLF included."""
+        path = self.fresh(newline="\r\n")
+        self.run_cli(str(path), "--in-place")
+        after_first = path.read_bytes()
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+        self.assertEqual(path.read_bytes(), after_first)
+        self.assertEqual(self.run_cli(str(path), "--check")[0], EXIT_OK)
+
+    def test_bom_document_lists_every_heading(self):
+        """The first heading is the one a BOM hides; it must still be there."""
+        path = self.write()
+        path.write_bytes(codecs.BOM_UTF8 + path.read_bytes())
+
+        code, out, err = self.run_cli(str(path))
+
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(err, "")
+        self.assertEqual(out, self.expected_toc() + "\n")
+        self.assertIn("- [Title](#title)", out)
+
+    def test_bom_is_not_reported_as_part_of_the_first_title(self):
+        path = self.write()
+        path.write_bytes(codecs.BOM_UTF8 + path.read_bytes())
+        _, out, _ = self.run_cli(str(path))
+        self.assertNotIn("\ufeff", out)
+
+    def test_bom_survives_in_place(self):
+        path = self.fresh(bom=True)
+        before = path.read_bytes()
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+
+        after = path.read_bytes()
+        self.assertTrue(after.startswith(codecs.BOM_UTF8), after[:8])
+        self.assertEqual(after, before)
+
+    def test_bom_is_written_exactly_once(self):
+        path = self.fresh(bom=True)
+        for _ in range(3):
+            self.run_cli(str(path), "--in-place")
+        self.assertEqual(path.read_bytes().count(codecs.BOM_UTF8), 1)
+
+    def test_a_document_without_a_bom_does_not_gain_one(self):
+        path = self.fresh()
+        self.run_cli(str(path), "--in-place")
+        self.assertFalse(path.read_bytes().startswith(codecs.BOM_UTF8))
+
+    def test_bom_and_crlf_round_trip_together(self):
+        """Neither fix may undo the other: both marks survive one run."""
+        path = self.fresh(newline="\r\n", bom=True)
+        before = path.read_bytes()
+        self.assertTrue(before.startswith(codecs.BOM_UTF8))
+        self.assertIn(b"\r\n", before)
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+
+        after = path.read_bytes()
+        self.assertEqual(after, before)
+        self.assertTrue(after.startswith(codecs.BOM_UTF8))
+        self.assertEqual(outside_markers(after), outside_markers(before))
+
+    def test_bom_and_crlf_document_still_lists_every_heading(self):
+        path = self.fresh(newline="\r\n", bom=True)
+        _, out, _ = self.run_cli(str(path))
+        self.assertEqual(out, self.expected_toc() + "\n")
+
+    def test_non_ascii_body_survives_in_place(self):
+        """`utf-8-sig` must still decode ordinary UTF-8 content unchanged."""
+        text = DOC.replace("Body text.", "Café — naïve — 日本語")
+        path = self.fresh(text)
+        before = path.read_bytes()
+
+        self.assertEqual(self.run_cli(str(path), "--in-place")[0], EXIT_OK)
+
+        self.assertEqual(path.read_bytes(), before)
+        self.assertIn("日本語", path.read_text(encoding="utf-8"))
 
 
 class TestParser(unittest.TestCase):

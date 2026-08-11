@@ -17,6 +17,7 @@ away by the comparison itself.
 Standard library only.
 """
 
+import codecs
 import io
 import shutil
 import subprocess
@@ -508,24 +509,24 @@ class TestInstalledEntryPoint(AcceptanceTestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
-class TestKnownDefects(AcceptanceTestCase):
+class TestFixedDefects(AcceptanceTestCase):
     """Reproductions for defects this suite found in the assembled CLI.
 
-    These are recorded rather than fixed: task 17 owns no source module, so the
-    repair belongs in a bug issue against the responsible task. They are marked
-    `expectedFailure` so `unittest discover` stays green while the reproduction
-    stays executable — the day one is fixed it reports as an unexpected success.
+    Task 17 owned no source module, so these were first recorded here as
+    `expectedFailure` reproductions and filed as bug issues against the task
+    responsible. Issues #20 and #21 fixed them in `md_toc.cli`; the
+    reproductions stay, now as ordinary tests, so the repair cannot silently
+    come undone.
     """
 
-    @unittest.expectedFailure
     def test_crlf_document_keeps_its_line_endings_outside_the_markers(self) -> None:
-        """DEFECT: `--in-place` rewrites a CRLF document's every line ending.
+        """Issue #20: `--in-place` must not rewrite a CRLF document's endings.
 
-        `cli.main` reads with `Path.read_text` (universal newlines, so CRLF
-        becomes LF) and writes the spliced result back with `Path.write_text`,
-        which emits LF on Linux. Story 2 requires the bytes outside the markers
-        to be unchanged; on a CRLF file every one of them changes, and the file
-        is rewritten wholesale even when its TOC was already current.
+        `cli.main` used to read with `Path.read_text` (universal newlines, so
+        CRLF became LF) and write the spliced result back with
+        `Path.write_text`, which emits LF on Linux. Story 2 requires the bytes
+        outside the markers to be unchanged; on a CRLF file every one of them
+        changed. Both handles now use `newline=""`, so nothing is translated.
         """
         path = self.copy_fixture("crlf.md")
         before = path.read_bytes()
@@ -535,6 +536,26 @@ class TestKnownDefects(AcceptanceTestCase):
         after = path.read_bytes()
 
         self.assertEqual(self.outside_markers(after), self.outside_markers(before))
+        self.assertIn(b"\r\n", self.outside_markers(after)[0])
+
+    def test_bom_document_lists_its_first_heading(self) -> None:
+        """Issue #21: a byte-order mark must not hide the first heading.
+
+        Decoding as plain UTF-8 left the mark as `\\ufeff` in front of the
+        first `#`, so the parser's `^#` anchor missed that line and the entry
+        vanished from the TOC with no diagnostic. Reading as `utf-8-sig`
+        consumes it.
+        """
+        path = self.workdir / "bom.md"
+        path.write_bytes(codecs.BOM_UTF8 + b"# Title\n\n## Alpha\n")
+
+        code, out, err = self.run_cli(str(path))
+
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(err, "")
+        self.assertEqual(
+            out.splitlines(), ["- [Title](#title)", "  - [Alpha](#alpha)"]
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -15,10 +15,18 @@ Exit codes are centralized here: `EXIT_OK` on success, `EXIT_STALE` for a stale
 TOC under `--check`, `EXIT_ERROR` for usage and I/O errors and for a document
 missing its marker comments.
 
+Because this is the encoding boundary, it is also where the document's byte-level
+identity is defended. Files are opened with `newline=""` in both directions, so
+no CRLF is silently normalized on the way in or re-emitted as LF on the way out,
+and they are decoded as `utf-8-sig`, so a byte-order mark is consumed instead of
+being handed to the parser as a `\\ufeff` in front of the first heading. A BOM
+that was present on input is written back, so neither guarantee costs the other.
+
 Standard library only.
 """
 
 import argparse
+import codecs
 import sys
 from pathlib import Path
 
@@ -77,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     path = Path(args.file)
 
     try:
-        text = path.read_text(encoding="utf-8")
+        text, has_bom = _read(path)
     except OSError as exc:
         return _error(f"cannot read {args.file}: {exc}")
 
@@ -102,10 +110,37 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_STALE
 
     try:
-        path.write_text(updated, encoding="utf-8")
+        _write(path, updated, has_bom)
     except OSError as exc:
         return _error(f"cannot write {args.file}: {exc}")
     return EXIT_OK
+
+
+def _read(path: Path) -> tuple[str, bool]:
+    """Return the text of `path` and whether it began with a UTF-8 BOM.
+
+    `newline=""` disables universal-newline translation, so a CRLF document
+    arrives with its `\\r\\n` intact and can be written back unchanged. The
+    `utf-8-sig` codec strips a leading byte-order mark, which would otherwise
+    sit in front of the first `#` and hide that heading from the parser. The
+    separate binary peek is what lets `--in-place` put the mark back: once the
+    codec has eaten it, the decoded text no longer records that it was there.
+    """
+    with open(path, "rb") as handle:
+        has_bom = handle.read(len(codecs.BOM_UTF8)) == codecs.BOM_UTF8
+    with open(path, encoding="utf-8-sig", newline="") as handle:
+        return handle.read(), has_bom
+
+
+def _write(path: Path, text: str, has_bom: bool) -> None:
+    """Write `text` to `path`, restoring the BOM when the source carried one.
+
+    `newline=""` again: the line endings in `text` are the ones read off disk,
+    so translating them here is exactly the corruption this avoids.
+    """
+    encoding = "utf-8-sig" if has_bom else "utf-8"
+    with open(path, "w", encoding=encoding, newline="") as handle:
+        handle.write(text)
 
 
 def _error(message: str) -> int:
