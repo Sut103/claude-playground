@@ -90,7 +90,7 @@ if [ $errors -eq 0 ] && [ $warnings -eq 0 ] && [ $invalid -eq 0 ]; then
   echo "✅ System is healthy!"
 else
   echo ""
-  echo "💡 Run /pm:clean to fix some issues automatically"
+  echo "💡 Archive completed epics under .claude/epics/archived/ to clear these"
 fi
 
 exit 0

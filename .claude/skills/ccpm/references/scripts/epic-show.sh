@@ -4,7 +4,7 @@ epic_name="$1"
 
 if [ -z "$epic_name" ]; then
   echo "❌ Please provide an epic name"
-  echo "Usage: /pm:epic-show <epic-name>"
+  echo "Usage: bash epic-show.sh <epic-name>"
   exit 1
 fi
 
@@ -71,7 +71,7 @@ done
 
 if [ $task_count -eq 0 ]; then
   echo "  No tasks created yet"
-  echo "  Run: /pm:epic-decompose $epic_name"
+  echo "  Say: break down the $epic_name epic"
 fi
 
 echo ""
@@ -84,8 +84,8 @@ echo "  Closed: $closed_count"
 # Next actions
 echo ""
 echo "💡 Actions:"
-[ $task_count -eq 0 ] && echo "  • Decompose into tasks: /pm:epic-decompose $epic_name"
-[ -z "$github" ] && [ $task_count -gt 0 ] && echo "  • Sync to GitHub: /pm:epic-sync $epic_name"
-[ -n "$github" ] && [ "$status" != "completed" ] && echo "  • Start work: /pm:epic-start $epic_name"
+[ $task_count -eq 0 ] && echo "  • Decompose into tasks — say: break down the $epic_name epic"
+[ -z "$github" ] && [ $task_count -gt 0 ] && echo "  • Sync to GitHub — say: sync the $epic_name epic to GitHub"
+[ -n "$github" ] && [ "$status" != "completed" ] && echo "  • Start work — say: start working on the $epic_name epic"
 
 exit 0
