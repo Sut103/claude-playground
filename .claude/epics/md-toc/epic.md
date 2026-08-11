@@ -2,8 +2,8 @@
 name: md-toc
 status: in-progress
 created: 2026-08-11T06:35:52Z
-updated: 2026-08-11T07:36:56Z
-progress: 87%
+updated: 2026-08-11T07:53:40Z
+progress: 90%
 prd: .claude/prds/md-toc.md
 github: https://github.com/Sut103/claude-playground/issues/11
 ---
@@ -98,7 +98,7 @@ Roughly one focused implementation session. Tasks 001–004 are the bulk of the 
 - [x] #18 - Nested TOC rendering (parallel: false)
 - [x] #13 - TOC splicing between marker comments (parallel: true)
 - [x] #15 - CLI wiring, flags, and exit-code contract (parallel: true)
-- [ ] #17 - Fixtures and end-to-end acceptance tests (parallel: false)
+- [x] #17 - Fixtures and end-to-end acceptance tests (parallel: false)
 
 Total tasks: 7
 Parallel tasks: 4
