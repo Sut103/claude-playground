@@ -57,6 +57,9 @@ for epic_dir in .claude/epics/*/; do
   [ -d "$epic_dir" ] || continue
   for task_file in "$epic_dir"/[0-9]*.md; do
     [ -f "$task_file" ] || continue
+    # Task files are named <issue-number>.md. The [0-9]*.md glob also catches
+    # CCPM's own <N>-analysis.md files, which would be counted as phantom tasks.
+    case "$(basename "$task_file" .md)" in *[!0-9]*) continue ;; esac
     status=$(grep "^status:" "$task_file" | head -1 | sed 's/^status: *//')
     if [ "$status" != "open" ] && [ -n "$status" ]; then
       continue
@@ -81,9 +84,9 @@ done
 
 echo ""
 echo "📊 Quick Stats:"
-total_tasks=$(find .claude/epics -name "[0-9]*.md" 2>/dev/null | wc -l)
-open_tasks=$(find .claude/epics -name "[0-9]*.md" -exec grep -l "^status: *open" {} \; 2>/dev/null | wc -l)
-closed_tasks=$(find .claude/epics -name "[0-9]*.md" -exec grep -l "^status: *closed" {} \; 2>/dev/null | wc -l)
+total_tasks=$(find .claude/epics -name "[0-9]*.md" ! -name "*[!0-9]*.md" 2>/dev/null | wc -l)
+open_tasks=$(find .claude/epics -name "[0-9]*.md" ! -name "*[!0-9]*.md" -exec grep -l "^status: *open" {} \; 2>/dev/null | wc -l)
+closed_tasks=$(find .claude/epics -name "[0-9]*.md" ! -name "*[!0-9]*.md" -exec grep -l "^status: *closed" {} \; 2>/dev/null | wc -l)
 echo "  Tasks: $open_tasks open, $closed_tasks closed, $total_tasks total"
 
 exit 0

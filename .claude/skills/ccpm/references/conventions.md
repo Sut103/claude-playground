@@ -200,8 +200,12 @@ grep 'github:' <file> | grep -oE '[0-9]+$'
 ## Epic Progress Calculation
 
 ```bash
-total=$(ls .claude/epics/<name>/[0-9]*.md 2>/dev/null | wc -l)
-closed=$(grep -l '^status: closed' .claude/epics/<name>/[0-9]*.md 2>/dev/null | wc -l)
+# `! -name "*[!0-9]*.md"` keeps <N>-analysis.md out of the count — it lives in
+# the same directory and would otherwise inflate the denominator, holding
+# progress permanently below its true value.
+tasks=$(find .claude/epics/<name> -maxdepth 1 -name "[0-9]*.md" ! -name "*[!0-9]*.md")
+total=$(echo "$tasks" | grep -c .)
+closed=$(echo "$tasks" | xargs grep -l '^status: closed' 2>/dev/null | wc -l)
 progress=$((closed * 100 / total))
 ```
 

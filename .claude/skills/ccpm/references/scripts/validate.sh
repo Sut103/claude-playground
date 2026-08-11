@@ -35,7 +35,7 @@ for epic_dir in .claude/epics/*/; do
 done
 
 # Check for tasks without epics
-orphaned=$(find .claude -name "[0-9]*.md" -not -path ".claude/epics/*/*" 2>/dev/null | wc -l)
+orphaned=$(find .claude -name "[0-9]*.md" ! -name "*[!0-9]*.md" -not -path ".claude/epics/*/*" 2>/dev/null | wc -l)
 [ $orphaned -gt 0 ] && echo "  ⚠️ Found $orphaned orphaned task files" && ((warnings++))
 
 # Check for broken references
@@ -44,6 +44,9 @@ echo "🔗 Reference Check:"
 
 for task_file in .claude/epics/*/[0-9]*.md; do
   [ -f "$task_file" ] || continue
+  # Task files are named <issue-number>.md. The [0-9]*.md glob also catches
+  # CCPM's own <N>-analysis.md files, which would be counted as phantom tasks.
+  case "$(basename "$task_file" .md)" in *[!0-9]*) continue ;; esac
 
   deps_line=$(grep "^depends_on:" "$task_file" | head -1)
   if [ -n "$deps_line" ]; then

@@ -51,6 +51,9 @@ else
   # Use find to safely iterate over task files
   for task_file in "$epic_dir"/[0-9]*.md; do
     [ -f "$task_file" ] || continue
+    # Task files are named <issue-number>.md. The [0-9]*.md glob also catches
+    # CCPM's own <N>-analysis.md files, which would be counted as phantom tasks.
+    case "$(basename "$task_file" .md)" in *[!0-9]*) continue ;; esac
     ((total++))
 
     task_status=$(grep "^status:" "$task_file" | head -1 | sed 's/^status: *//')
