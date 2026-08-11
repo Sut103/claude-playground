@@ -51,7 +51,7 @@ name: <Task Title>
 status: open
 created: <run: date -u +"%Y-%m-%dT%H:%M:%SZ">
 updated: <same as created>
-github: (will be set on sync)
+github:
 depends_on: []
 parallel: true
 conflicts_with: []

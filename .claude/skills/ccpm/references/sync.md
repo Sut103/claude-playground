@@ -240,7 +240,7 @@ name: Bug: <short description>
 status: open
 created: <run: date -u +"%Y-%m-%dT%H:%M:%SZ">
 updated: <same>
-github: (will be set on sync)
+github:
 depends_on: []
 parallel: false
 conflicts_with: []

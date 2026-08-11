@@ -34,6 +34,8 @@ echo ""
 status=$(grep "^status:" "$epic_file" | head -1 | sed 's/^status: *//')
 progress=$(grep "^progress:" "$epic_file" | head -1 | sed 's/^progress: *//')
 github=$(grep "^github:" "$epic_file" | head -1 | sed 's/^github: *//')
+# A parenthesized value is an unfilled template placeholder, not a URL — treat as unset
+case "$github" in \(*) github="" ;; esac
 created=$(grep "^created:" "$epic_file" | head -1 | sed 's/^created: *//')
 
 echo "📊 Metadata:"

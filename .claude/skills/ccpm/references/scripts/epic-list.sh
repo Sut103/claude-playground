@@ -25,6 +25,8 @@ for dir in .claude/epics/*/; do
   s=$(grep "^status:" "$dir/epic.md" | head -1 | sed 's/^status: *//' | tr '[:upper:]' '[:lower:]')
   p=$(grep "^progress:" "$dir/epic.md" | head -1 | sed 's/^progress: *//')
   g=$(grep "^github:" "$dir/epic.md" | head -1 | sed 's/^github: *//')
+  # A parenthesized value is an unfilled template placeholder, not a URL — treat as unset
+  case "$g" in \(*) g="" ;; esac
 
   # Defaults
   [ -z "$n" ] && n=$(basename "$dir")

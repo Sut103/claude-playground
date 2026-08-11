@@ -126,7 +126,17 @@ gh <command> || echo "❌ GitHub CLI failed. Run: gh auth login"
 ### Getting Issue Numbers
 ```bash
 # From a task file's github field:
-grep 'github:' <file> | grep -oE '[0-9]+$'
+issue_number=$(grep '^github:' <file> | head -1 | grep -oE '[0-9]+$')
+```
+
+Before sync the `github:` field is empty, so this yields an empty string. Always
+check before using it as an issue number — an empty value passed to `gh` targets
+the wrong thing or fails obscurely:
+```bash
+if [ -z "$issue_number" ]; then
+  echo "❌ <file> has no GitHub issue yet. Sync the epic first."
+  exit 1
+fi
 ```
 
 ---
