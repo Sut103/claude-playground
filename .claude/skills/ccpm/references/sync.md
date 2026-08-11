@@ -34,7 +34,7 @@ REPO=$(echo "$remote_url" | sed 's|.*github.com[:/]||' | sed 's|\.git$||')
 
 Strip frontmatter from epic.md, then:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' .claude/epics/<name>/epic.md > /tmp/epic-body.md
+sed '1,/^---$/d' .claude/epics/<name>/epic.md > /tmp/epic-body.md
 epic_number=$(gh issue create \
   --repo "$REPO" \
   --title "Epic: <name>" \
@@ -57,7 +57,7 @@ For ≥5 tasks: use parallel Task agents (3-4 tasks per batch).
 
 Per task:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <task_file> > /tmp/task-body.md
+sed '1,/^---$/d' <task_file> > /tmp/task-body.md
 task_number=$(gh issue create \
   --repo "$REPO" \
   --title "<task_name>" \

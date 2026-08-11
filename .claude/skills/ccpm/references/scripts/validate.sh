@@ -44,7 +44,7 @@ for task_file in .claude/epics/*/[0-9]*.md; do
 
   deps_line=$(grep "^depends_on:" "$task_file" | head -1)
   if [ -n "$deps_line" ]; then
-    deps=$(echo "$deps_line" | sed 's/^depends_on: *//' | sed 's/^\[//' | sed 's/\]$//' | sed 's/,/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    deps=$(echo "$deps_line" | sed 's/^depends_on: *//' | sed 's/^\[//' | sed 's/\]$//' | sed 's/,/ /g' | tr -d '\42\47' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
     [ -z "$deps" ] && deps=""
   else
     deps=""

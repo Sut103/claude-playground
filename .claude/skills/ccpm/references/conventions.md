@@ -99,7 +99,7 @@ rm <file>.bak
 
 When stripping frontmatter to get body content for GitHub:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <file> > /tmp/body.md
+sed '1,/^---$/d' <file> > /tmp/body.md
 ```
 
 ---
