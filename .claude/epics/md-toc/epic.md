@@ -1,10 +1,11 @@
 ---
 name: md-toc
-status: backlog
+status: in-progress
 created: 2026-08-11T06:35:52Z
+updated: 2026-08-11T07:00:35Z
 progress: 0%
 prd: .claude/prds/md-toc.md
-github: (will be set on sync)
+github: https://github.com/Sut103/claude-playground/issues/11
 ---
 
 # Epic: md-toc
@@ -91,13 +92,13 @@ No dependency on other epics or on external teams.
 Roughly one focused implementation session. Tasks 001–004 are the bulk of the logic; 005–007 are mechanical once the core is in place. The two parallel pairs mean the critical path is about four sequential steps rather than seven.
 
 ## Tasks Created
-- [ ] 001.md - Package scaffold, Heading type, and exit-code constants (parallel: false)
-- [ ] 002.md - Heading extraction with fenced-code suppression (parallel: true)
-- [ ] 003.md - GitHub anchor slug generation (parallel: true)
-- [ ] 004.md - Nested TOC rendering (parallel: false)
-- [ ] 005.md - TOC splicing between marker comments (parallel: true)
-- [ ] 006.md - CLI wiring, flags, and exit-code contract (parallel: true)
-- [ ] 007.md - Fixtures and end-to-end acceptance tests (parallel: false)
+- [ ] #12 - Package scaffold, Heading type, and exit-code constants (parallel: false)
+- [ ] #14 - Heading extraction with fenced-code suppression (parallel: true)
+- [ ] #16 - GitHub anchor slug generation (parallel: true)
+- [ ] #18 - Nested TOC rendering (parallel: false)
+- [ ] #13 - TOC splicing between marker comments (parallel: true)
+- [ ] #15 - CLI wiring, flags, and exit-code contract (parallel: true)
+- [ ] #17 - Fixtures and end-to-end acceptance tests (parallel: false)
 
 Total tasks: 7
 Parallel tasks: 4
