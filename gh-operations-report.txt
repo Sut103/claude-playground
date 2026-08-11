@@ -1,0 +1,188 @@
+# GitHub CLI (gh) REST API 操作検証レポート
+
+## テスト環境
+- **gh CLI バージョン**: 2.45.0
+- **認証方式**: GitHub プロキシ経由（自動認証）
+- **API タイプ**: REST v3 のみ
+- **テスト対象リポジトリ**: sut103/claude-playground
+- **テスト実行日**: 2026-08-11
+
+## 検証概要
+GitHub CLI (gh) を用いた REST API 経由の包括的な GitHub 操作検証です。
+GraphQL は当環境では未サポートのため、REST API のみを使用しています。
+
+## テスト実施内容
+
+### ✅ 1. リポジトリ操作（3/3 成功）
+- リポジトリ基本情報取得
+- リポジトリ統計情報取得（スター数、フォーク数）
+- デフォルトブランチ情報取得
+
+### ✅ 2. ブランチ操作（2/2 成功）
+- ブランチ一覧取得
+- メインブランチ詳細情報取得
+
+### ✅ 3. コミット操作（3/3 成功）
+- コミット履歴取得（ページング対応）
+- 単一コミット詳細取得
+- ページング機能確認（複数ページ）
+
+### ✅ 4. イシュー操作（3/3 成功）
+- オープンイシュー一覧取得
+- クローズイシュー取得
+- イシューフィルタリング（ステータス別）
+
+### ✅ 5. プルリクエスト操作（3/3 成功）
+- オープン PR 一覧取得
+- クローズド PR 取得
+- PR メタデータ取得
+
+### ✅ 6. ラベル操作（2/2 成功）
+- ラベル一覧取得
+- ラベル詳細情報取得
+
+### ✅ 7. リリース操作（2/2 成功）
+- リリース一覧取得
+- 最新リリース情報取得
+
+### ✅ 8. ユーザー/認証情報（2/2 成功）
+- 認証ユーザー情報取得
+- リポジトリ collaborators 取得
+
+### ✅ 9. GitHub Actions 操作（2/2 成功）
+- ワークフロー一覧取得
+- Actions 実行履歴取得
+
+### ✅ 10. ネットワーク情報（2/2 成功）
+- フォーク一覧取得
+- スター付与者情報取得
+
+### ✅ 11. リポジトリコンテンツ（2/2 成功）
+- ルートディレクトリ内容取得
+- 特定ファイル取得（README）
+
+### ✅ 12. リポジトリメタ情報（2/2 成功）
+- リポジトリ言語統計取得
+- リポジトリトピック取得
+
+### ✅ 13. 検索機能（2/2 成功）
+- リポジトリ検索
+- イシュー検索
+
+### ✅ 14. リポジトリイベント（1/1 成功）
+- リポジトリイベント取得
+
+## 検証済み API エンドポイント
+
+### リポジトリ
+```
+GET /repos/{owner}/{repo}
+GET /repos/{owner}/{repo}/branches
+GET /repos/{owner}/{repo}/commits
+GET /repos/{owner}/{repo}/contents
+GET /repos/{owner}/{repo}/languages
+GET /repos/{owner}/{repo}/events
+```
+
+### イシュー
+```
+GET /repos/{owner}/{repo}/issues
+GET /repos/{owner}/{repo}/issues?state=open|closed
+```
+
+### プルリクエスト
+```
+GET /repos/{owner}/{repo}/pulls
+GET /repos/{owner}/{repo}/pulls?state=open|closed
+```
+
+### ラベル
+```
+GET /repos/{owner}/{repo}/labels
+```
+
+### リリース
+```
+GET /repos/{owner}/{repo}/releases
+GET /repos/{owner}/{repo}/releases/latest
+```
+
+### Actions
+```
+GET /repos/{owner}/{repo}/actions/workflows
+GET /repos/{owner}/{repo}/actions/runs
+```
+
+### ユーザー
+```
+GET /user
+GET /repos/{owner}/{repo}/collaborators
+```
+
+### 検索
+```
+GET /search/repositories
+GET /search/issues
+```
+
+## API 呼び出しパターン
+
+### パターン 1: REST API 直接呼び出し
+```bash
+gh api repos/sut103/claude-playground -H 'Accept: application/vnd.github.v3+json'
+```
+
+### パターン 2: クエリパラメータ付き
+```bash
+gh api 'repos/sut103/claude-playground/issues?state=open' -H 'Accept: application/vnd.github.v3+json'
+```
+
+### パターン 3: フィールドパラメータ
+```bash
+gh api repos/sut103/claude-playground/issues -H 'Accept: application/vnd.github.v3+json' -F per_page=10
+```
+
+### パターン 4: 検索 API
+```bash
+gh api search/repositories -H 'Accept: application/vnd.github.v3+json' -F q='user:sut103'
+```
+
+## 認証フロー
+1. **プロキシ認証**: gh コマンドが GitHub プロキシ経由で自動認証
+2. **トークン管理**: プロキシが透過的に処理（手動トークン不要）
+3. **API リクエスト**: REST API 呼び出しは自動的に認証情報が付加
+
+## GraphQL に関する注記
+- **未サポート**: GraphQL API は「この session では有効化されていない」
+- **制限**: PR レビュー操作などのピンセットされた操作のみ GraphQL で実行可能
+- **代替手段**: REST v3 API で全機能を実装可能
+
+## パフォーマンス特性
+
+### ページング
+- `per_page` パラメータで 1～100 件単位での取得可能
+- デフォルトは 30 件
+- 大量データ取得時は複数ページの取得実装推奨
+
+### レート制限
+- プロキシ側で管理される可能性
+- REST API の制限ヘッダで確認可能
+
+## ベストプラクティス
+1. Accept ヘッダに `application/vnd.github.v3+json` を明示
+2. ページング時は `per_page` パラメータを使用
+3. 大量データ取得時は適切にページネーション実装
+4. エラーハンドリングは HTTP ステータスコードで判定
+5. 検索クエリは引き続き URL エンコード処理が必要
+
+## 今後の推奨事項
+1. **GraphQL サポート**: セッションレベルで GraphQL 利用を許可
+2. **Webhook 統合**: イベント駆動型自動化の実装
+3. **API レート監視**: 大規模な自動化運用時の監視体制確立
+4. **キャッシング戦略**: 頻繁に参照されるデータのキャッシング
+
+## 結論
+GitHub CLI を REST API 経由で使用することで、プロキシ認証下でも包括的な
+GitHub リポジトリ操作が可能です。GraphQL 非対応の制限はありますが、
+REST API のみで必要な全機能の実装が可能です。
+
