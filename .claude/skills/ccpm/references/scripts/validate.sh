@@ -85,7 +85,7 @@ invalid=0
 # reported a failure after every successful sync.
 for file in $(find .claude/epics .claude/prds -name "*.md" 2>/dev/null); do
   case "$(basename "$file")" in
-    github-mapping.md|execution-status.md) continue ;;
+    github-mapping.md|execution-status.md|execution.md) continue ;;
   esac
   if [ "$(head -1 "$file")" != "---" ]; then
     echo "  ⚠️ Missing frontmatter: $(basename "$file")"

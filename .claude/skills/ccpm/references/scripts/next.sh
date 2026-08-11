@@ -38,8 +38,24 @@ for epic_dir in .claude/epics/*/; do
       deps=""
     fi
 
-    # If no dependencies or empty, task is available
-    if [ -z "$deps" ] || [ "$deps" = "depends_on:" ]; then
+    # A task is available when it has no dependencies, or when every dependency
+    # is closed. Only the first half used to be implemented, so once the
+    # dependency-free tasks were done this script reported "no available tasks"
+    # forever, no matter how much of the epic was actually unblocked.
+    unmet=""
+    if [ -n "$deps" ] && [ "$deps" != "depends_on:" ]; then
+      for dep in $(echo "$deps" | tr ',' ' '); do
+        dep_file="$epic_dir/$dep.md"
+        if [ ! -f "$dep_file" ]; then
+          unmet="$unmet $dep"
+          continue
+        fi
+        dep_status=$(grep "^status:" "$dep_file" | head -1 | sed 's/^status: *//')
+        [ "$dep_status" = "closed" ] || unmet="$unmet $dep"
+      done
+    fi
+
+    if [ -z "$unmet" ]; then
       task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
       task_num=$(basename "$task_file" .md)
       parallel=$(grep "^parallel:" "$task_file" | head -1 | sed 's/^parallel: *//')

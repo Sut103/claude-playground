@@ -37,25 +37,29 @@ for epic_dir in .claude/epics/*/; do
       deps=""
     fi
 
-    if [ -n "$deps" ] && [ "$deps" != "depends_on:" ]; then
+    # Having a depends_on entry is not the same as being blocked — a task is
+    # blocked only while some dependency is still unclosed. Reporting on the
+    # mere presence of dependencies left tasks listed as blocked forever, even
+    # after everything they waited on had closed.
+    unmet=""
+    for dep in $deps; do
+      dep_file="$epic_dir$dep.md"
+      if [ ! -f "$dep_file" ]; then
+        unmet="$unmet #$dep(missing)"
+        continue
+      fi
+      dep_status=$(grep "^status:" "$dep_file" | head -1 | sed 's/^status: *//')
+      [ "$dep_status" = "closed" ] || unmet="$unmet #$dep"
+    done
+
+    if [ -n "$unmet" ]; then
       task_name=$(grep "^name:" "$task_file" | head -1 | sed 's/^name: *//')
       task_num=$(basename "$task_file" .md)
 
       echo "⏸️ Task #$task_num - $task_name"
       echo "   Epic: $epic_name"
       echo "   Blocked by: [$deps]"
-
-      # Check status of dependencies
-      open_deps=""
-      for dep in $deps; do
-        dep_file="$epic_dir$dep.md"
-        if [ -f "$dep_file" ]; then
-          dep_status=$(grep "^status:" "$dep_file" | head -1 | sed 's/^status: *//')
-          [ "$dep_status" = "open" ] && open_deps="$open_deps #$dep"
-        fi
-      done
-
-      [ -n "$open_deps" ] && echo "   Waiting for:$open_deps"
+      echo "   Waiting for:$unmet"
       echo ""
       ((found++))
     fi
