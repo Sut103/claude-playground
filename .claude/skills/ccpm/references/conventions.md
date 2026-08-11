@@ -99,8 +99,14 @@ rm <file>.bak
 
 When stripping frontmatter to get body content for GitHub:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <file> > /tmp/body.md
+bash <skill>/references/scripts/strip-frontmatter.sh <file> > /tmp/body.md
 ```
+
+Do **not** chain two `1,/^---$/d` ranges. A single one already removes both
+delimiters — the range opens on line 1 and its end regex is searched from
+line 2, so it closes on the terminating `---`. A second identical command
+re-opens a range on the first body line, finds no further `---`, and deletes
+through EOF, producing an empty body.
 
 ---
 

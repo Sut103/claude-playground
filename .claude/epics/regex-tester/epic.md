@@ -2,10 +2,10 @@
 name: regex-tester
 status: backlog
 created: 2026-08-11T14:27:30Z
-updated: 2026-08-11T14:27:30Z
+updated: 2026-08-11T14:37:39Z
 progress: 0%
 prd: .claude/prds/regex-tester.md
-github: (will be set on sync)
+github: https://github.com/Sut103/claude-playground/issues/27
 ---
 
 # Epic: regex-tester
@@ -108,14 +108,14 @@ PRD の Success Criteria を 1 つずつ実測で潰す。ReDoS 耐性と XSS �
 
 | # | タスク | 依存 | 並列 |
 |---|---|---|---|
-| 001 | プロジェクト基盤とデータ契約 | なし | — |
-| 002 | マッチエンジン | 001 | ✅ |
-| 003 | ハイライト範囲の算出 | 001 | ✅ |
-| 004 | 置換プレビュー | 001 | ✅ |
-| 005 | 履歴の永続化モデル | 001 | ✅ |
-| 006 | Worker 隔離とタイムアウト | 002, 004 | — |
-| 007 | UI 結線と描画 | 003, 005, 006 | — |
-| 008 | 受け入れ確認 | 007 | — |
+| 28 | プロジェクト基盤とデータ契約 | なし | — |
+| 29 | マッチエンジン | 28 | ✅ |
+| 30 | ハイライト範囲の算出 | 28 | ✅ |
+| 31 | 置換プレビュー | 28 | ✅ |
+| 32 | 履歴の永続化モデル | 28 | ✅ |
+| 33 | Worker 隔離とタイムアウト | 29, 31 | — |
+| 34 | UI 結線と描画 | 30, 32, 33 | — |
+| 35 | 受け入れ確認 | 34 | — |
 
 8 タスク。フェーズ 2 で 4 並列が効く。
 
@@ -128,7 +128,7 @@ PRD の Success Criteria を 1 つずつ実測で潰す。ReDoS 耐性と XSS �
 - Node.js 18 以上（`node --test` の安定版が要る。実行環境は v22）
 - Python 3（動作確認用の静的サーバ。他のサーバでも代替可）
 
-**タスク間依存** — 上表のとおり。001 が全体のクリティカルパス先頭、006 と 007 が合流点。
+**タスク間依存** — 上表のとおり。28 が全体のクリティカルパス先頭、33 と 34 が合流点。
 
 ## Success Criteria (Technical)
 
@@ -145,26 +145,26 @@ PRD の Success Criteria を 1 つずつ実測で潰す。ReDoS 耐性と XSS �
 
 | タスク | サイズ |
 |---|---|
-| 001 プロジェクト基盤とデータ契約 | S |
-| 002 マッチエンジン | M |
-| 003 ハイライト範囲の算出 | S |
-| 004 置換プレビュー | S |
-| 005 履歴の永続化モデル | S |
-| 006 Worker 隔離とタイムアウト | M |
-| 007 UI 結線と描画 | M |
-| 008 受け入れ確認 | S |
+| 28 プロジェクト基盤とデータ契約 | S |
+| 29 マッチエンジン | M |
+| 30 ハイライト範囲の算出 | S |
+| 31 置換プレビュー | S |
+| 32 履歴の永続化モデル | S |
+| 33 Worker 隔離とタイムアウト | M |
+| 34 UI 結線と描画 | M |
+| 35 受け入れ確認 | S |
 
 直列に積むと 8 タスク分。フェーズ 2 の 4 並列が効くため、実時間では 5 フェーズ分に圧縮される。
 
 ## Tasks Created
-- [ ] 001.md - プロジェクト基盤とデータ契約 (parallel: false)
-- [ ] 002.md - マッチエンジン (parallel: true)
-- [ ] 003.md - ハイライト範囲の算出 (parallel: true)
-- [ ] 004.md - 置換プレビュー (parallel: true)
-- [ ] 005.md - 履歴の永続化モデル (parallel: true)
-- [ ] 006.md - Worker 隔離とタイムアウト (parallel: false)
-- [ ] 007.md - UI 結線と描画 (parallel: false)
-- [ ] 008.md - 受け入れ確認 (parallel: false)
+- [ ] #28 - プロジェクト基盤とデータ契約 (parallel: false)
+- [ ] #29 - マッチエンジン (parallel: true)
+- [ ] #30 - ハイライト範囲の算出 (parallel: true)
+- [ ] #31 - 置換プレビュー (parallel: true)
+- [ ] #32 - 履歴の永続化モデル (parallel: true)
+- [ ] #33 - Worker 隔離とタイムアウト (parallel: false)
+- [ ] #34 - UI 結線と描画 (parallel: false)
+- [ ] #35 - 受け入れ確認 (parallel: false)
 
 Total tasks: 8
 Parallel tasks: 4

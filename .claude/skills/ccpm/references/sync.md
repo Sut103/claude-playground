@@ -34,7 +34,7 @@ REPO=$(echo "$remote_url" | sed 's|.*github.com[:/]||' | sed 's|\.git$||')
 
 Strip frontmatter from epic.md, then:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' .claude/epics/<name>/epic.md > /tmp/epic-body.md
+bash <skill>/references/scripts/strip-frontmatter.sh .claude/epics/<name>/epic.md > /tmp/epic-body.md
 jq -n --arg t "Epic: <name>" --rawfile b /tmp/epic-body.md \
       --argjson l '["epic","epic:<name>","feature"]' \
       '{title:$t, body:$b, labels:$l}' > /tmp/epic-payload.json
@@ -60,7 +60,7 @@ For ≥5 tasks: use parallel Task agents (3-4 tasks per batch).
 
 Per task:
 ```bash
-sed '1,/^---$/d; 1,/^---$/d' <task_file> > /tmp/task-body.md
+bash <skill>/references/scripts/strip-frontmatter.sh <task_file> > /tmp/task-body.md
 jq -n --arg t "<task_name>" --rawfile b /tmp/task-body.md \
       --argjson l '["task","epic:<name>"]' \
       '{title:$t, body:$b, labels:$l}' > /tmp/task-payload.json
@@ -91,6 +91,24 @@ After all issues are created, rename `001.md` → `<issue_number>.md` and update
 # Build old→new mapping, then for each task file:
 sed -i.bak "s/\b001\b/<new_num_1>/g" <file>  # repeat for each mapping
 mv 001.md <new_num>.md
+```
+
+**Step 3b — Rewrite the epic body's task checklist and push it:**
+
+The epic issue was created before the task issues existed, so its `## Tasks
+Created` section still lists sequential filenames. Rewrite those entries to
+`- [ ] #<issue_number> - <title>` in `epic.md`, then PATCH the epic issue with
+the updated body.
+
+Do not skip this. *Closing an Issue* below checks a task off with
+`sed "s/- \[ \] #<N>/- [x] #<N>/"` against the epic body — if the body never
+gained a `- [ ] #<N>` checklist, that substitution silently matches nothing
+and epic progress never reflects closed tasks.
+
+```bash
+bash <skill>/references/scripts/strip-frontmatter.sh .claude/epics/<name>/epic.md > /tmp/epic-body.md
+jq -n --rawfile b /tmp/epic-body.md '{body:$b}' > /tmp/epic-edit.json
+gh api --method PATCH "repos/$REPO/issues/$epic_number" --input /tmp/epic-edit.json --jq .number
 ```
 
 **Step 4 — Update frontmatter:**
