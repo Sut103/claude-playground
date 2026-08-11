@@ -3,6 +3,7 @@ name: regex-tester
 description: ビルド工程を持たないブラウザ単体の正規表現テスター。マッチのハイライト、キャプチャ一覧、置換プレビュー、履歴の永続化を提供し、暴走パターンは Web Worker のタイムアウトで打ち切る。
 status: backlog
 created: 2026-08-11T14:20:48Z
+updated: 2026-08-11T14:26:00Z
 ---
 
 # PRD: regex-tester
@@ -122,7 +123,7 @@ created: 2026-08-11T14:20:48Z
 
 ## Success Criteria
 
-1. `index.html` をブラウザで直接開いて全機能が動作する（サーバ起動やビルド手順を要さない）
+1. ソースを配置した状態で静的ファイルサーバ（`python3 -m http.server` 等）を起動し、`index.html` を開くだけで全機能が動作する。トランスパイル・バンドル・パッケージインストールのいずれも要さない
 2. `node --test` が追加インストールなしに実行でき、全テストが通る
 3. ロジック層（マッチ・置換・履歴・ハイライト範囲計算）の関数が単体テストで覆われている
 4. `(a+)+$` に 30 文字以上の非マッチ文字列を当てても、UI がタイムアウト表示を返して操作可能なままである
@@ -142,8 +143,11 @@ created: 2026-08-11T14:20:48Z
 - 利用者は正規表現の基本構文を既に知っている。文法の教育はアプリの役目ではない
 - 単一利用者・単一端末での利用。同期や共有は考えない
 
+**検証済みの制約**
+- `file://` 経由では ES モジュールが読み込めない。Chromium で実測したところ、`origin 'null'` からのスクリプト取得が CORS で拒否され（`Cross origin requests are only supported for protocol schemes: chrome, chrome-untrusted, data, http, https`）、アプリが起動しない。同一構成を `http://127.0.0.1` 経由で開いた場合はモジュール・Worker とも正常動作した
+- したがって**起動には静的ファイルサーバを要する**。これはビルド工程ではなく、`python3 -m http.server` で足りる。README に起動手順を明記する
+
 **既知のリスク**
-- `file://` 経由で開いた場合、ブラウザによっては ES モジュールと Web Worker が CORS 制約で読み込めない。この場合の起動手順を決めておく必要がある（Epic の Architecture Decisions で扱う）
 - Worker はタイムアウト時に `terminate()` するため、worker の再生成コストが連続タイムアウト時に積み上がる
 
 ## Out of Scope

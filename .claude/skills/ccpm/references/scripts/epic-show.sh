@@ -60,12 +60,16 @@ for task_file in "$epic_dir"/[0-9]*.md; do
   task_status=$(grep "^status:" "$task_file" | head -1 | sed 's/^status: *//')
   parallel=$(grep "^parallel:" "$task_file" | head -1 | sed 's/^parallel: *//')
 
+  # Build the marker before printing: emitting it after the task line (with
+  # `echo -n`) appended it to the *next* task's line instead.
+  parallel_marker=""
+  [ "$parallel" = "true" ] && parallel_marker=" (parallel)"
+
   if [ "$task_status" = "closed" ] || [ "$task_status" = "completed" ]; then
     echo "  ✅ #$task_num - $task_name"
     ((closed_count++))
   else
-    echo "  ⬜ #$task_num - $task_name"
-    [ "$parallel" = "true" ] && echo -n " (parallel)"
+    echo "  ⬜ #$task_num - $task_name$parallel_marker"
     ((open_count++))
   fi
 
