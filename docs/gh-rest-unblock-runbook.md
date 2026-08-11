@@ -17,10 +17,19 @@ An org admin must connect the Claude GitHub App for this organization.
 
 ## 結論
 
-**ユーザー側で解除する手段は無い。** GitHub 側の設定・Claude 側の資格情報はいずれも正常で、
+GitHub 側の App 設定・Claude 側の資格情報はいずれも正常で、
 **VM 内から出る経路に限って `repos/**` REST が拒否されている。**
-これは公式ドキュメントの記述と矛盾するため、**プラットフォーム側の不具合または
-staging 環境の設定漏れ**として報告するのが妥当。
+
+> **更新**: 当初ここに「ユーザー側で解除する手段は無い」と書いたが、
+> 既知問題調査で**未試行の公式手順が1つ見つかった** —
+> claude.ai 側の「リンク」操作（`claude.ai/admin-settings/github` の **Unlinked accounts** → **Link**）。
+> GitHub 側の App インストールとは別の手順で、本件の 403 文面と正確に対応する。
+> **まずこれを試す。** 詳細は [`known-issues-survey.md`](./known-issues-survey.md) を参照。
+
+それでも解消しない場合は、公式ドキュメントの記述と矛盾する状態であるため
+**プラットフォーム側の不具合または staging 環境の設定漏れ**として報告するのが妥当。
+同系統の Open な issue として
+[#76248](https://github.com/anthropics/claude-code/issues/76248) がある。
 
 ### 403 のエラーメッセージは実態を指していない
 
