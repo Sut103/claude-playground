@@ -1,139 +1,186 @@
-# CCPM 検証レポート (2 回目の中断)
+# CCPM 検証レポート (全フェーズ完走)
 
 - 対象: automazeio/ccpm upstream `7d7e462`
 - 実行日: 2026-08-11
 - 方針: CCPM スキル規定どおりに実行。CCPM 本体のバグは無条件修正。
-  `gh` 障害への MCP 迂回は 1 回のみ許容、以降は中断。
-- 結果: **Phase 4 (Execute) preflight で中断**。Phase 1–3 と 5 は完走。
+  `gh` 障害への MCP 迂回は各ラウンド 1 回のみ許容。
+- 結果: **Phase 1–5 完走**。エピック `md-toc` をマージ・アーカイブまで完了。
 
 ## 到達状況
 
 | Phase | 結果 |
 |---|---|
 | 導入 (`.claude/skills/ccpm`) | ✅ |
-| `init.sh` | ⚠️ exit 0 だが 3 点の劣化 (障害 D) |
+| `init.sh` | ⚠️ exit 0 だが 3 点の劣化 (障害 D、未修正) |
 | 1. Plan (PRD → Epic) | ✅ |
 | 2. Structure (7 タスク分解) | ✅ 並列エージェント 2 バッチ |
-| 3. Sync (issue #11, #12–#18) | ✅ **MCP 迂回を 1 回消費** |
-| 4. Execute | ❌ **中断** (gh 障害 2 回目) |
+| 3. Sync (issue #11, #12–#18) | ✅ MCP 迂回 (1 回目) |
+| 4. Execute (5 波、うち 2 波は並列) | ✅ MCP 迂回 (2 回目) |
 | 5. Track | ✅ 同期後の実データで全スクリプト正常 |
+| Merge & Archive | ✅ |
 
-生成物: PRD 1、Epic 1、タスク 7、GitHub issue 8 (epic #11 + task #12–#18)、
-worktree `../epic-md-toc` (branch `epic/md-toc`)。
+**成果物**: `md_toc/` パッケージ (標準ライブラリのみ)、テスト 280 件全通過。
+GitHub issue 13 件 (epic 1、task 7、bug 5)。
 
-## 修正した CCPM 本体のバグ (3 件)
-
-いずれもネットワーク状態に依存せず、正常な GitHub 接続環境でも発生する。
+## 修正した CCPM 本体のバグ (5 件)
 
 ### A. frontmatter 除去で本文が全消滅 (重大)
 
-```bash
-sed '1,/^---$/d; 1,/^---$/d' <file>   # → 0 バイト
-```
+`sed '1,/^---$/d; 1,/^---$/d'` は本文を丸ごと削除する。`1,/^---$/` は開始・終了の
+`---` を両方含む 1 レンジで 1 回で完結しており、2 つ目が本文先頭で再活性化して
+EOF まで削除するため。
 
-`1,/^---$/` は開始・終了の `---` を両方含む 1 レンジで、1 回で除去は完了して
-いる。2 つ目が本文先頭で再活性化し、次の `^---$` が無いため EOF まで削除する。
-
-- 該当: `references/sync.md` Step 1 / Step 2、`references/conventions.md`
+- 該当: `sync.md` Step 1/2、`conventions.md`
 - 影響: **epic と全タスクの issue が本文空で作成される**。
-  `gh issue create --body-file` は空ファイルでも成功するためエラーにならない
-  (サイレントなデータ欠損)。
-- 修正: `sed '1,/^---$/d'` の 1 回に変更。
-- 検証: 除去結果が 0 → 7222 バイト (epic) / 3002 バイト (task)。
+  `gh issue create --body-file` は空ファイルでも成功するため気付けない。
+- 修正: 1 回に変更。除去結果 0 → 7222 バイト (epic) / 3002 バイト (task)。
 
 ### B. `validate.sh` が引用符付き `depends_on` を解決できない
 
-sed チェーンが `[`, `]`, `,` を除去するが引用符を残すため、`depends_on: ["001"]`
-を `"001".md` として探し「参照先が存在しない」と誤警告する。
+sed チェーンが引用符を残すため `"001".md` を探して外す。
 
-- 修正: `tr -d '\42\47'` を追加 (octal 指定でシェル引用の入れ子を回避)。
-- 検証: 警告 8 件 → 0 件、`✅ All references valid`。
+- 修正: `tr -d '\42\47'` 追加。警告 8 件 → 0 件。
 
 ### C. `validate.sh` が CCPM 自身の生成物を invalid と判定
 
-`sync.md` Step 6 が規定する `github-mapping.md` は frontmatter を持たないが、
-`validate.sh` は `epics/` 配下の全 `.md` に frontmatter を要求するため、
-CCPM が自分で作ったファイルを invalid と報告する
-(`execution-status.md`、`updates/*.md` も同様)。
+`sync.md` Step 6 が frontmatter 無しで作れと規定する `github-mapping.md` を、
+`validate.sh` が frontmatter 必須として弾く (`execution-status.md`、
+`updates/*.md` も同様)。同行の `find` 演算子優先順位バグも併せて修正。
 
-- 修正: 上記の bookkeeping ファイルを frontmatter 検査から除外。
-- 併せて同行の `find` 演算子優先順位バグも修正。
-  `-name "*.md" -path "*/epics/*" -o -path "*/prds/*"` は
-  `(-name AND epics) OR (prds)` と解釈され、`prds/` 配下は拡張子を問わず
-  全て走査されていた。括弧で括って修正。
-- 検証: `Invalid files: 1` → `0`、`✅ System is healthy!`。
+### D. Execute フェーズでエピック状態が 2 つの作業コピーに分裂 (重大)
 
-## 障害 D (未修正・CCPM のエラーハンドリング不備): `init.sh` が失敗を握り潰す
+`execute.md` は `.claude/epics/` の状態をどの作業コピーが保持するか規定していない。
+メインセッションはメインリポジトリに analysis / progress を書き、エージェントは
+worktree で動くため、**エージェントは読むべき analysis ファイルを見つけられず、
+その進捗書き込みはメインセッションから見えない**。
 
-`init.sh` は exit 0 で「Initialization Complete!」を返すが実際には:
+実際に発生した事象:
+- #12 のエージェントが「`12-analysis.md` が存在しない」と報告
+- `updates/12/stream-A.md` が `in_progress` と `completed` の 2 つに分裂
 
-1. `gh auth status` がトークン無効でも exit 0 のため
-   **「✅ GitHub authenticated」と誤報告**。同スクリプト末尾では
-   「Auth: Not authenticated」と自己矛盾した表示。
-2. `gh-sub-issue` 拡張のインストールが 403 で失敗。
-3. `gh repo view` が 403 → 「Not a GitHub repository」と誤判定し、
-   **`epic` / `task` ラベルが未作成**。
+- 修正: worktree を実行中の単一の正とする旨を `execute.md` に明記し、
+  エージェントには絶対パスを渡すよう規定。
+- **スクリプトの静的解析では検出できない。並列エージェントを実際に走らせて
+  初めて顕在化する種類の欠陥。**
+
+### E. `validate.sh` が `archived/` をエピックとして誤判定
+
+`sync.md` のマージ手順が作る `.claude/epics/archived/` を、`validate.sh` が
+不正なエピックとして扱い「Missing epic.md in archived」と警告する。
+
+- 修正: `archived/` を容れ物として扱い、その中の各エピックを検証するよう変更。
+- 現在 `✅ System is healthy!`。
+
+## 未修正の CCPM 課題 (2 件)
+
+### F. `init.sh` が失敗を握り潰して exit 0 する
+
+1. `gh auth status` がトークン無効でも exit 0 のため「✅ GitHub authenticated」と
+   誤報告 (同スクリプト末尾では「Not authenticated」と自己矛盾)
+2. `gh-sub-issue` 拡張のインストールが 403 で失敗
+3. `gh repo view` の 403 を「GitHub リポジトリではない」と誤判定し、
+   **`epic` / `task` ラベルが未作成**
 
 利用者は「成功」を信じて Sync に進み、そこで初めて失敗する。
-今回は Sync を MCP 経由にした結果ラベルが自動生成されたため顕在化しなかった
-(`gh` 経由なら `--label` 指定で失敗していたはず)。
 
-## 中断理由: `gh` 障害の 2 回目 (Execute preflight)
+### G. エピックのアーカイブが未クローズの関連バグを不可視化する (設計課題)
+
+マージ手順はエピックディレクトリを `archived/` へ移すが、その中に**未クローズの
+バグタスクが含まれていても考慮しない**。実際 #22 (open) がアーカイブ配下に移動し、
+その結果:
 
 ```
-$ gh issue view 12 --json state,title,labels,body
-HTTP 403: This GraphQL query is not enabled for this session —
-only the pinned set of PR-review operations is served.
+$ bash references/scripts/status.sh
+📚 Epics: Total: 0      # アーカイブ済みは集計外
+📝 Tasks: Open: 0       # 未クローズの #22 が見えない
+$ bash references/scripts/next.sh
+📊 Summary: 0 tasks ready to start
 ```
 
-Execute の preflight 1 番目が `gh issue view` であり、ここで停止。
-preflight の他 2 項目 (ローカルタスクファイル、worktree) は充足済み。
+未完了の作業が追跡系から完全に消える。修正には「アーカイブ時に未クローズ課題を
+別エピックへ退避する」等の設計判断が要るため、報告にとどめた。
 
-**背景** — GitHub 自体は到達可能で、MCP 経由なら `Sut103` として認証される。
-本セッションのプロキシが GitHub アクセスを MCP ツール面に限定し、シェルからの
-`gh` / REST / GraphQL を遮断している。CCPM は GitHub 操作を全面的に `gh` CLI へ
-ハードコードしており (`sync.md`, `execute.md`, `init.sh`)、この前提が衝突する。
+## CCPM が機能した点
 
-**影響** — Execute (issue 分析、並列エージェント起動、`gh issue edit` による
-アサイン) が実行不可。Sync の progress コメント投稿とクローズ処理も同様。
-ローカル完結の Phase 1/2/5 は無影響。
+### 並列実行モデルは実証された
 
-## Sync を MCP 経由にしたことによる副作用 (要注意)
+4 波の並列エージェント実行で**相互汚染ゼロ**。各エージェントが自分の所有パスのみを
+明示的に stage する運用が有効に働いた。wave 4 では #15 が #13 のモジュールに依存
+していたが、#13 がテスト整備前に `splice.py` を先行コミットしたため待ちは発生せず
+(#15 の報告: 待機 0 秒)。
 
-`gh` ではなく MCP でイシューを作成した結果、**本文がローカルファイルと一致しない**。
+| Wave | Issues | 形態 |
+|---|---|---|
+| 1 | #12 | 逐次 (直列化点) |
+| 2 | #14, #16 | **並列** |
+| 3 | #18 | 逐次 (合流点) |
+| 4 | #13, #15 | **並列** |
+| 5 | #17 | 逐次 (シーム検証) |
+
+### 仕様のファイル化がバグを捕捉した
+
+**#19 は Structure フェーズ由来の欠陥**だった。PRD の FR4 は "spaces to hyphens"
+かつ「GitHub のアンカーアルゴリズムが対象」と明記していたが、分解時に作った 16.md
+が「連続空白を 1 個に畳む」という独自ルールを追加していた (GitHub の実挙動は
+`C++ / C#` → `c--c`、実装は `c-c`)。
+
+実装エージェントが**タスクファイルと PRD を突き合わせて矛盾を検出**した。要件が
+人の頭ではなくファイルにあるという CCPM の前提が、そのまま効いた形。放置すれば
+#17 の受け入れテストが誤挙動を正として固定していた。
+
+### 受け入れテストが単体テストの盲点を突いた
+
+#17 は #20 (CRLF 破壊)、#21 (BOM で先頭見出し消失)、#22 (マーカー領域内の見出しで
+冪等性破れ) を検出した。いずれも**単体テストでは原理的に検出できない** — CLI より
+下の全モジュールはデコード済み文字列を扱い、生バイトを見ないため。
+
+#20 は PRD Story 2 の明示的な受け入れ基準違反。エージェントは `expectedFailure`
+として記録し、修正された日に「予期せぬ成功」として検知される形にした。
+
+## 意図的な逸脱・判断 (3 件)
+
+1. **worktree の基点** — `sync.md` Step 5 は `main` から作ると規定するが、`main` には
+   CCPM 一式も epic ファイルも無く、規定どおりでは worktree が空になり Execute が
+   成立しない。指定ブランチを基点とした。CCPM が「epic は常に main から派生する」を
+   暗黙の前提にしていることの表れ。
+2. **#22 / #23 を未クローズのままマージ** — #22 の修正は parser/CLI 境界の設計変更
+   であり、エピック終盤で急ぐと限定的なコーナーケースと引き換えに実害のある
+   リグレッションを招く。既知の制約として文書化した。
+3. **#23 のローカルタスクファイルなし** — #20 修正中に判明した派生課題であり、
+   GitHub issue のみ作成した。アーカイブ済みエピックにファイルを後付けするより、
+   次に着手するエピックで起票する方が整合的と判断。
+
+## Sync を MCP 経由にしたことによる副作用
+
+`gh` ではなく MCP でイシューを作成したため、**本文がローカルファイルと一致しない**。
 
 - HTML コメント `<!-- toc -->` `<!-- /toc -->` が本文から除去される
 - `->` が `-&gt;` にエスケープされる
 
-issue #13 を読み戻して確認済み。とりわけ #13 は「マーカーコメント間への TOC 挿入」
-that itself が主題であり、GitHub 上の本文は該当箇所が空になって意味が通らない。
-ローカルの `.claude/epics/md-toc/13.md` が正であり、そちらは無傷。
+issue #13 を読み戻して確認済み。#13 は「マーカーコメント間への TOC 挿入」自体が
+主題であり、GitHub 上の本文は該当箇所が空で意味が通らない。ローカルの
+`.claude/epics/archived/md-toc/13.md` が正。
 
-また `gh-sub-issue` 拡張が使えないため、`Part of #11` はテキスト参照にとどまり、
+また `gh-sub-issue` が使えないため `Part of #11` はテキスト参照にとどまり、
 GitHub 上の親子関係は成立していない (`has_parent: false`)。
-
-## CCPM 規定からの逸脱 (1 件、意図的)
-
-`sync.md` Step 5 は worktree を `main` から作ると規定するが、`main` には CCPM 一式も
-epic ファイルも存在しない (本検証は指定ブランチ上で実施)。規定どおり `main` を
-基点にすると worktree が空になり Execute が成立しないため、
-**指定ブランチ `claude/ccpm-branch-deployment-8cr8cq` を基点**とした。
-
-これは CCPM が「epic は常に main から派生する」ことを暗黙の前提にしていることの
-表れであり、フィーチャーブランチ上で CCPM を運用する場合は一般に踏む。
 
 ## 切り分け表
 
-| # | 分類 | 根拠 |
+| # | 分類 | 検出方法 |
 |---|---|---|
-| A | **CCPM のバグ** (修正済) | GNU sed 単体で再現。ネットワーク非依存 |
-| B | **CCPM のバグ** (修正済) | スクリプト静的解析で確定。ネットワーク非依存 |
-| C | **CCPM の内部不整合** (修正済) | sync.md の生成物を validate.sh が拒否 |
-| D | CCPM のエラーハンドリング不備 (未修正) | 403 は環境由来、握り潰して exit 0 は CCPM 側 |
-| 中断要因 | 環境 (CCPM の `gh` 依存と衝突) | MCP 経由では到達可。遮断はシェル経路のみ |
+| A | CCPM のバグ (修正済) | GNU sed 単体で再現。ネットワーク非依存 |
+| B | CCPM のバグ (修正済) | スクリプト静的解析 |
+| C | CCPM の内部不整合 (修正済) | Sync Step 6 実行時に顕在化 |
+| D | **CCPM の設計欠陥 (修正済)** | **並列エージェントの実走行でのみ顕在化** |
+| E | CCPM の内部不整合 (修正済) | アーカイブ実行時に顕在化 |
+| F | エラーハンドリング不備 (未修正) | init 実行時。403 は環境由来、握り潰しは CCPM 側 |
+| G | 設計課題 (未修正) | アーカイブ後の追跡系で顕在化 |
 
-## 再開する場合の選択肢
+## 環境制約
 
-1. Execute も MCP 経由に振り替える (CCPM 本体の改変が必要)
-2. `gh` がそのまま通る環境で Execute 以降を実施
-3. A–C の修正を upstream (automazeio/ccpm) へ報告する
+`gh` CLI は本セッションから GitHub API に到達できない (GraphQL / REST とも 403)。
+GitHub 自体は到達可能で、MCP 経由なら `Sut103` として認証される。プロキシが
+GitHub アクセスを MCP ツール面に限定し、シェルからの `gh` を遮断しているため。
+CCPM は GitHub 操作を全面的に `gh` へハードコードしており、この前提が衝突する。
+
+本検証では許諾のもと Sync と Execute で各 1 回ずつ MCP へ振り替えた。
