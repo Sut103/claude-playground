@@ -19,7 +19,9 @@ trap 'rm -rf "$TMP"' EXIT
 classify() {
   case "$1" in
     *"sessions are bound to their configured repositories"*) echo "クラスA: 非リポジトリスコープのパス禁止" ;;
-    *"An org admin must connect the Claude GitHub App"*)     echo "クラスB: Claude GitHub App 未接続ゲート" ;;
+    # 文面は App 接続を要求するが実態を指していない。App を All repositories で導入済みでも
+    # この 403 は出る（docs/gh-rest-unblock-runbook.md 参照）。
+    *"An org admin must connect the Claude GitHub App"*)     echo "クラスB: repos/** 拒否（文面はApp未接続だが実態は別）" ;;
     *"not permitted through this proxy"*)                    echo "クラスC: 恒久禁止パス" ;;
     *"GraphQL"*"not enabled for this session"*)              echo "クラスD: GraphQL 制限（仕様・解除不可）" ;;
     "") echo "-" ;;
@@ -117,7 +119,8 @@ if [ "$rest_ok" = "1" ]; then
   echo "     GraphQL 依存のサブコマンド（gh issue list 等）は引き続き不可。"
   exit 0
 else
-  echo "  ❌ REST repos/** は依然 403。クラスB（App 未接続）が解消していない。"
-  echo "     App をインストール済みなら、新しいセッションで再実行して確認する。"
+  echo "  ❌ REST repos/** は依然 403。"
+  echo "     Claude GitHub App の導入では解消しないことが確認済み。"
+  echo "     docs/gh-rest-unblock-runbook.md の報告手順を参照。"
   exit 1
 fi

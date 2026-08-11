@@ -10,7 +10,7 @@
 | **誰が設定した?** | **Anthropic**。ユーザーも所属 org も設定していない。MITM CA の subject が `O = Anthropic` |
 | **どこのプロキシ?** | **3層**ある。①VM内のエージェントプロキシ（`claude` プロセス自身） ②CCR Upstream Proxy ③**Egress Gateway**（VM外・ネットワーク層）。GitHub の拒否を出しているのは②/③側 |
 | **背景は?** | **実際の GitHub credential を VM 内に置かないための設計**。公式ドキュメントに "GitHub proxy" として明記された仕様 |
-| **解除可能か?** | **半分だけ可能**。REST の `repos/**` は Claude GitHub App の接続で解除できる見込み。**GraphQL 制限は仕様として解除不可** |
+| **解除可能か?** | **ユーザー側では不可**。GraphQL 制限は仕様として解除不可。REST `repos/**` は当初 App 接続で解除できると見たが**検証で否定**（§5-1）。プラットフォーム側の不具合として報告する案件 |
 
 CCPM にとって重要な点: **CCPM が依存する `gh issue list` 系は GraphQH 制限側に当たるため、解除不可の側**に落ちる。
 
@@ -201,28 +201,49 @@ X-Accepted-Github-Permissions: allows_permissionless_access=true
 > | **GitHub App** | Authorize the Claude GitHub App during web onboarding | ... |
 > | **`/web-setup`** | Run `/web-setup` in your terminal to sync your local `gh` CLI token | ... |
 
-B のメッセージが名指しで App 接続を要求していることと、`repos/**` が
-**リポジトリの attach 状態とは無関係に**（`add_repo` は `already_present` を返し、
-`git` は完全動作しているのに）403 になることを合わせると、
-**`repos/**` REST は Claude GitHub App の接続を前提にしている**と読むのが自然である。
+当初はここから「`repos/**` REST は Claude GitHub App の接続を前提にしている」と推論した。
+**この推論は誤りだった。** 実際には:
+
+- App は **All repositories** で導入済み（`issues` 書き込み権限つき）でも 403 のまま
+- **内蔵 GitHub ツールは同じ REST パスを取得できる**
+
+したがって B は「App 未接続ゲート」ではなく、**VM 内から出る経路に対してのみ
+`repos/**` を拒否している状態**である。メッセージの文面は実態を指していない。
+詳細は §5-1 と [`gh-rest-unblock-runbook.md`](./gh-rest-unblock-runbook.md) を参照。
 
 ---
 
 ## 5. 解除可能性
 
-### 5-1. REST（クラス B）→ **解除できる見込みが高い（未検証）**
+### 5-1. REST（クラス B）→ **仮説は否定された。ユーザー側で解除する手段は無い**
 
-**手段**: `https://github.com/apps/claude` から **Claude GitHub App を
-`Sut103/claude-playground` にインストールする**（onboarding をやり直して App 認可でも同じ）。
+> **訂正**: 当初ここに「Claude GitHub App をインストールすれば解除できる見込みが高い」と書いた。
+> **検証によりこの仮説は否定された。**
 
-- 根拠: 403 の文面が名指しで App 接続を要求している。ドキュメントも
-  App 認可を GitHub 認証の第一経路として挙げている。
-- これが解ければ **クラス A / D が案内している `gh api repos/{owner}/{repo}/...` が開通**し、
-  Issue/PR の CRUD は REST で実行可能になる。
-- **重要な注意**: 本セッション内からは App をインストールできないため **未検証の仮説**。
-  信頼度は高い（エラー文面＋ドキュメントの整合）が、確定ではない。
-  Gateway 側の別 allowlist が残る可能性は排除できない。
-- 副作用として Auto-fix（PR webhook）も有効になる。
+検証結果:
+
+- Claude GitHub App は対象アカウントに **All repositories** で3週間前から導入済み。
+  権限に `Read and write access to actions, checks, code, discussions, issues,
+  pull requests, repository hooks, and workflows` を含む。**それでも 403 のまま。**
+- **内蔵 GitHub ツールは同じ REST パス（`repos/{o}/{r}/contents/README.md`）を取得できる。**
+  → GitHub 側の権限も Claude 側の資格情報も正常。
+- したがって原因はアカウント権限ではなく **呼び出し元による経路の差**。
+  VM 内から出る経路に限って `repos/**` が拒否されている。
+
+**403 の文面 "An org admin must connect the Claude GitHub App" は実態を指していない
+汎用フォールバック文言。** これを信じて App 設定を追うと時間を失う。
+
+さらに公式ドキュメントは `gh release` / `gh workflow run`（いずれも `repos/**` REST）のために
+`gh` を自分で入れて使うことを明示的に推奨しており、**動くと書かれている操作が動かない**。
+GraphQL 制限の 403 が案内する代替手段（`gh api repos/{owner}/{repo}/...`）そのものが
+塞がれているという自己矛盾も生じている。
+
+→ **仕様ではなく、プラットフォーム側の不具合または staging 環境の設定漏れ**と判断するのが妥当。
+本セッションは staging のアップストリームプロキシと production の Egress Gateway が
+混在している（`CCR Upstream Proxy CA (staging)`、`CCR_TEST_GITPROXY=1`）。
+
+対処は「新しいセッションでの再検証」と「Anthropic サポートへの報告」の2つ。
+手順と報告テンプレートは [`gh-rest-unblock-runbook.md`](./gh-rest-unblock-runbook.md) を参照。
 
 ### 5-2. GraphQL（クラス D）→ **解除不可（仕様）**
 
