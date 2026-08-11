@@ -2,7 +2,7 @@
 name: regex-tester
 status: backlog
 created: 2026-08-11T14:30:55Z
-updated: 2026-08-11T14:30:55Z
+updated: 2026-08-11T14:44:54Z
 progress: 0%
 prd: .claude/prds/regex-tester.md
 github:
@@ -262,3 +262,19 @@ PRD の SC-1〜SC-9 を技術的な検証手段に落とす。
 **クリティカルパス**: 001 → (002–007 のうち最も重いもの) → 008 → 009。フェーズ 2 を 6 並列で回せる場合、直列実行に対して壁時計時間はおよそ 4 段分に短縮される。
 
 **最も不確実なのは 009。** 性能（SC-5）と無限ループ耐性（SC-3）は実測するまで達成可否が分からず、未達なら 003/004 への差し戻しが発生する。ここに L を積んでいる。
+
+## Tasks Created
+- [ ] 001.md - スキャフォールド、DOM 契約、テストハーネス (parallel: false)
+- [ ] 002.md - 評価コア — RegExp 構築と exec 反復 (parallel: true)
+- [ ] 003.md - セグメント変換と HTML エスケープ（純粋関数） (parallel: true)
+- [ ] 004.md - ハイライト描画（DOM） (parallel: true)
+- [ ] 005.md - グループ表描画 (parallel: true)
+- [ ] 006.md - 置換プレビュー (parallel: true)
+- [ ] 007.md - 永続化とフォールバック (parallel: true)
+- [ ] 008.md - 結線とフラグ制御 (parallel: false)
+- [ ] 009.md - E2E スイートと NFR 検証 (parallel: false)
+
+Total tasks: 9
+Parallel tasks: 6
+Sequential tasks: 3
+Estimated total effort: 38 hours
