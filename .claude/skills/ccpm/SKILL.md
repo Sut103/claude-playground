@@ -46,22 +46,27 @@ Before doing anything, read `references/conventions.md` for path standards, fron
 
 ## Script-First Rule
 
-For deterministic operations — anything that reads and reports without needing reasoning — always run the bash script directly rather than doing the work manually:
+For deterministic operations — anything that reads and reports without needing reasoning — always run the bash script directly rather than doing the work manually.
+
+`$CCPM` below is this skill's `references/` directory — resolve it to wherever the
+skill is installed (e.g. `.claude/skills/ccpm/references`). The scripts read
+`.claude/**` and anchor themselves to the project root, so they can be invoked
+from anywhere inside the repository:
 
 | What the user wants | Script to run |
 |---|---|
-| Project status | `bash references/scripts/status.sh` |
-| Standup report | `bash references/scripts/standup.sh` |
-| List all epics | `bash references/scripts/epic-list.sh` |
-| Show epic details | `bash references/scripts/epic-show.sh <name>` |
-| Epic status | `bash references/scripts/epic-status.sh <name>` |
-| List PRDs | `bash references/scripts/prd-list.sh` |
-| PRD status | `bash references/scripts/prd-status.sh` |
-| Search issues/tasks | `bash references/scripts/search.sh <query>` |
-| What's in progress | `bash references/scripts/in-progress.sh` |
-| What's next | `bash references/scripts/next.sh` |
-| What's blocked | `bash references/scripts/blocked.sh` |
-| Validate project state | `bash references/scripts/validate.sh` |
+| Project status | `bash $CCPM/scripts/status.sh` |
+| Standup report | `bash $CCPM/scripts/standup.sh` |
+| List all epics | `bash $CCPM/scripts/epic-list.sh` |
+| Show epic details | `bash $CCPM/scripts/epic-show.sh <name>` |
+| Epic status | `bash $CCPM/scripts/epic-status.sh <name>` |
+| List PRDs | `bash $CCPM/scripts/prd-list.sh` |
+| PRD status | `bash $CCPM/scripts/prd-status.sh` |
+| Search issues/tasks | `bash $CCPM/scripts/search.sh <query>` |
+| What's in progress | `bash $CCPM/scripts/in-progress.sh` |
+| What's next | `bash $CCPM/scripts/next.sh` |
+| What's blocked | `bash $CCPM/scripts/blocked.sh` |
+| Validate project state | `bash $CCPM/scripts/validate.sh` |
 
 Use the LLM for work that requires reasoning: writing PRDs, analyzing parallelism, launching agents, synthesizing updates.
 

@@ -1,4 +1,7 @@
 #!/bin/bash
+# Scripts read .claude/** relative to CWD; anchor to the project root so they
+# work when invoked from a subdirectory (e.g. an epic worktree).
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 
 echo "Validating PM System..."
 echo ""
