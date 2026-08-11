@@ -1,8 +1,8 @@
 ---
 name: md-toc
-status: in-progress
+status: completed
 created: 2026-08-11T06:35:52Z
-updated: 2026-08-11T07:53:40Z
+updated: 2026-08-11T07:54:54Z
 progress: 90%
 prd: .claude/prds/md-toc.md
 github: https://github.com/Sut103/claude-playground/issues/11

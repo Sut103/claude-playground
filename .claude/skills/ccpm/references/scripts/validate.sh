@@ -25,6 +25,18 @@ echo "🗂️ Data Integrity:"
 # Check epics have epic.md files
 for epic_dir in .claude/epics/*/; do
   [ -d "$epic_dir" ] || continue
+  # archived/ is a container of completed epics, not an epic itself — the epic
+  # merge step (sync.md) creates it. Validate the epics inside it instead.
+  if [ "$(basename "$epic_dir")" = "archived" ]; then
+    for archived_dir in "$epic_dir"*/; do
+      [ -d "$archived_dir" ] || continue
+      if [ ! -f "$archived_dir/epic.md" ]; then
+        echo "  ⚠️ Missing epic.md in archived/$(basename "$archived_dir")"
+        ((warnings++))
+      fi
+    done
+    continue
+  fi
   if [ ! -f "$epic_dir/epic.md" ]; then
     echo "  ⚠️ Missing epic.md in $(basename "$epic_dir")"
     ((warnings++))
